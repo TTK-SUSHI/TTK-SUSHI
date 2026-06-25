@@ -1,0 +1,1853 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>ТТК — Суши Бар</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{background:#08090f;color:#f2f4fc;font-family:'Inter',sans-serif;font-size:14px;
+  background-image:
+    radial-gradient(ellipse 800px 500px at 10% -10%, rgba(0,229,255,.06), transparent),
+    radial-gradient(ellipse 800px 500px at 90% 10%, rgba(177,74,255,.06), transparent),
+    radial-gradient(ellipse 600px 400px at 50% 100%, rgba(255,46,136,.04), transparent);
+  background-attachment:fixed;}
+::-webkit-scrollbar{width:5px;height:5px}
+::-webkit-scrollbar-track{background:#11131f}
+::-webkit-scrollbar-thumb{background:#2a2f4a;border-radius:3px}
+input,select,textarea{background:#11131f;color:#f2f4fc;border:1px solid #2a2f4a;border-radius:8px;padding:8px 12px;font-family:inherit;font-size:14px;outline:none;width:100%;transition:border-color .15s,box-shadow .15s}
+input:focus,select:focus,textarea:focus{border-color:#00e5c7;box-shadow:0 0 0 3px rgba(0,229,199,.15)}
+button{cursor:pointer;font-family:inherit;border:none;border-radius:8px;transition:opacity .15s,transform .1s}
+button:hover{opacity:.85}
+button:active{transform:scale(.97)}
+table{width:100%;border-collapse:collapse}
+th{text-align:left;font-size:11px;color:#7b82a8;font-weight:700;text-transform:uppercase;letter-spacing:.6px;padding:9px 12px;border-bottom:1px solid #2a2f4a;white-space:nowrap}
+td{padding:11px 12px;border-bottom:1px solid #1c2036;font-size:13px}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:#11131f}
+@media(max-width:768px){td,th{padding:8px 8px;font-size:12px}}
+/* AI import spinner */
+@keyframes spin{to{transform:rotate(360deg)}}
+.ai-spin{animation:spin .8s linear infinite;display:inline-block}
+/* AI shimmer */
+@keyframes shimmer{0%{opacity:.5}50%{opacity:1}100%{opacity:.5}}
+.ai-loading-row{animation:shimmer 1.2s ease-in-out infinite}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel" data-presets="react">
+const {useState,useCallback,useEffect,useRef}=React;
+
+// ════════════════════ ПАЛИТРА ════════════════════
+const C={
+  bg:"#08090f",surface:"#11131f",card:"#161a2c",border:"#2a2f4a",
+  accent:"#ff2e88",accentSoft:"#34102a",
+  green:"#39ff8f",greenSoft:"#0a2a1c",
+  yellow:"#ffd60a",yellowSoft:"#332a06",
+  blue:"#00e5ff",blueSoft:"#062a30",
+  purple:"#b14aff",purpleSoft:"#220c38",
+  teal:"#00e5c7",tealSoft:"#05302a",
+  text:"#f2f4fc",muted:"#7b82a8",tag:"#1c2036",
+};
+
+// ════════════════════ % УТИЛИТЫ ════════════════════
+const costSharePct=(cost,price)=>price?Math.round((cost/price)*100):0;
+const markupPct=(cost,price)=>cost?Math.round(((price-cost)/cost)*100):0;
+
+// ════════════════════ ДАННЫЕ ════════════════════
+const NOW=Date.now();
+const DISH_CATEGORIES=["Комбо","Сеты","Суши","Роллы","Пицца","Бургеры","Вок","Закуски","Напитки"];
+const PRODUCT_CATEGORIES=["Рыба","Мясо","Овощи","Специи","Масла","Упаковка","Другое"];
+const SET_CATEGORIES=["Комбо","Сеты"];
+
+const uid=()=>Date.now()+Math.floor(Math.random()*9999);
+const fmt=(n)=>Number(n||0).toLocaleString("ru",{maximumFractionDigits:0});
+const fmt2=(n)=>Number(n||0).toLocaleString("ru",{maximumFractionDigits:2});
+const fmtDate=(ts)=>new Date(ts).toLocaleDateString("ru",{day:"2-digit",month:"2-digit",year:"numeric"});
+const netto=(brutto,loss)=>+(brutto*(1-(loss||0)/100)).toFixed(2);
+const isSetCat=(cat)=>SET_CATEGORIES.includes(cat);
+
+function productUnitCost(product){
+  if(!product?.priceHistory?.length)return 0;
+  const last=product.priceHistory[product.priceHistory.length-1].price;
+  if(product.priceFor==="кг"||product.priceFor==="л")return last/1000;
+  return last;
+}
+function semiTotalInputQty(semi){
+  const fromP=(semi.composition||[]).reduce((s,c)=>s+c.qty,0);
+  const fromS=(semi.semiLines||[]).reduce((s,r)=>s+r.qty,0);
+  return fromP+fromS;
+}
+function semiCostPerUnit(semi,products,semis){
+  const totalQty=semi.outputQtyOverride||semiTotalInputQty(semi)||semi.outputQty;
+  if(!semi||!totalQty)return 0;
+  const fromP=(semi.composition||[]).reduce((s,c)=>{
+    const p=products.find(p=>p.id===c.productId);
+    return s+(p?productUnitCost(p)*c.qty:0);
+  },0);
+  const fromS=(semi.semiLines||[]).reduce((s,r)=>{
+    const sm=semis?.find(sm=>sm.id===r.semiId);
+    return s+(sm?semiCostPerUnit(sm,products,semis)*r.qty:0);
+  },0);
+  return (fromP+fromS)/totalQty;
+}
+function semiBatchCost(semi,products,semis){
+  const fromP=(semi.composition||[]).reduce((s,c)=>{
+    const p=products.find(p=>p.id===c.productId);
+    return s+(p?productUnitCost(p)*c.qty:0);
+  },0);
+  const fromS=(semi.semiLines||[]).reduce((s,r)=>{
+    const sm=semis?.find(sm=>sm.id===r.semiId);
+    return s+(sm?semiCostPerUnit(sm,products,semis)*r.qty:0);
+  },0);
+  return fromP+fromS;
+}
+function dishPackagingCost(dish,products){
+  return (dish.productLines||[]).reduce((s,r)=>{
+    const p=products.find(p=>p.id===r.productId);
+    if(!p||p.category!=="Упаковка")return s;
+    return s+productUnitCost(p)*r.brutto;
+  },0);
+}
+function dishCost(dish,products,semis,dishes){
+  const fromProducts=(dish.productLines||[]).reduce((s,r)=>{
+    const p=products.find(p=>p.id===r.productId);
+    if(!p)return s;
+    return s+productUnitCost(p)*netto(r.brutto,r.loss);
+  },0);
+  const fromSemis=(dish.semiLines||[]).reduce((s,r)=>{
+    const semi=semis.find(sm=>sm.id===r.semiId);
+    if(!semi)return s;
+    return s+semiCostPerUnit(semi,products,semis)*r.qty;
+  },0);
+  const fromDishes=(dish.dishLines||[]).reduce((s,r)=>{
+    const d=dishes?.find(d=>d.id===r.dishId);
+    if(!d||d.id===dish.id)return s;
+    const fullCost=dishCost(d,products,semis,dishes)*r.qty;
+    const packCost=isSetCat(dish.category)?dishPackagingCost(d,products)*r.qty:0;
+    return s+fullCost-packCost;
+  },0);
+  const fromPack=(dish.packLines||[]).reduce((s,r)=>{
+    const p=products.find(p=>p.id===r.productId);
+    if(!p)return s;
+    return s+productUnitCost(p)*r.qty;
+  },0);
+  return fromProducts+fromSemis+fromDishes+fromPack;
+}
+function dishWeight(dish,dishes){
+  const fromProducts=(dish.productLines||[]).reduce((s,r)=>s+netto(r.brutto,r.loss),0);
+  const fromSemis=(dish.semiLines||[]).reduce((s,r)=>s+r.qty,0);
+  const fromDishes=(dish.dishLines||[]).reduce((s,r)=>{
+    const d=dishes?.find(d=>d.id===r.dishId);
+    if(!d||d.id===dish.id)return s;
+    return s+(d.weightOverride||dishWeight(d,dishes))*r.qty;
+  },0);
+  return fromProducts+fromSemis+fromDishes;
+}
+
+const SEED_PRODUCTS=[
+  {id:1,name:"Лосось филе",unit:"г",priceFor:"кг",category:"Рыба",priceHistory:[{date:NOW-86400000*5,price:5500},{date:NOW,price:5900}]},
+  {id:2,name:"Рис круглозёрный (сухой)",unit:"г",priceFor:"кг",category:"Другое",priceHistory:[{date:NOW,price:650}]},
+  {id:3,name:"Нори",unit:"шт",priceFor:"шт",category:"Другое",priceHistory:[{date:NOW,price:18}]},
+  {id:4,name:"Авокадо",unit:"г",priceFor:"кг",category:"Овощи",priceHistory:[{date:NOW,price:2200}]},
+  {id:5,name:"Сливочный сыр",unit:"г",priceFor:"кг",category:"Другое",priceHistory:[{date:NOW,price:3500}]},
+  {id:6,name:"Огурец свежий",unit:"г",priceFor:"кг",category:"Овощи",priceHistory:[{date:NOW,price:400}]},
+  {id:7,name:"Тунец филе",unit:"г",priceFor:"кг",category:"Рыба",priceHistory:[{date:NOW,price:7200}]},
+  {id:8,name:"Кунжут белый",unit:"г",priceFor:"кг",category:"Специи",priceHistory:[{date:NOW,price:2800}]},
+  {id:9,name:"Рисовый уксус",unit:"мл",priceFor:"л",category:"Специи",priceHistory:[{date:NOW,price:1800}]},
+  {id:10,name:"Сахар",unit:"г",priceFor:"кг",category:"Специи",priceHistory:[{date:NOW,price:450}]},
+  {id:11,name:"Соль",unit:"г",priceFor:"кг",category:"Специи",priceHistory:[{date:NOW,price:200}]},
+  {id:12,name:"Соевые бобы (для соуса)",unit:"г",priceFor:"кг",category:"Другое",priceHistory:[{date:NOW,price:900}]},
+  {id:13,name:"Майонез",unit:"г",priceFor:"кг",category:"Другое",priceHistory:[{date:NOW,price:1400}]},
+  {id:14,name:"Сыр моцарелла",unit:"г",priceFor:"кг",category:"Другое",priceHistory:[{date:NOW,price:3200}]},
+  {id:15,name:"Мука пшеничная",unit:"г",priceFor:"кг",category:"Другое",priceHistory:[{date:NOW,price:280}]},
+  {id:16,name:"Курица филе",unit:"г",priceFor:"кг",category:"Мясо",priceHistory:[{date:NOW,price:1900}]},
+  {id:17,name:"Говядина (для бургера)",unit:"г",priceFor:"кг",category:"Мясо",priceHistory:[{date:NOW,price:3800}]},
+  {id:18,name:"Булка бургерная",unit:"шт",priceFor:"шт",category:"Другое",priceHistory:[{date:NOW,price:250}]},
+  {id:19,name:"Кола (сироп)",unit:"мл",priceFor:"л",category:"Другое",priceHistory:[{date:NOW,price:1200}]},
+  {id:20,name:"Масло фритюрное",unit:"мл",priceFor:"л",category:"Масла",priceHistory:[{date:NOW,price:988}]},
+  {id:21,name:"Контейнер одиночный (пластик)",unit:"шт",priceFor:"шт",category:"Упаковка",priceHistory:[{date:NOW,price:50}]},
+  {id:22,name:"Контейнер пенопластовый 2-3 ролла",unit:"шт",priceFor:"шт",category:"Упаковка",priceHistory:[{date:NOW,price:35}]},
+  {id:23,name:"Соусничка соевая 50мл",unit:"шт",priceFor:"шт",category:"Упаковка",priceHistory:[{date:NOW,price:15}]},
+  {id:24,name:"Палочки деревянные",unit:"шт",priceFor:"шт",category:"Упаковка",priceHistory:[{date:NOW,price:8}]},
+  {id:25,name:"Имбирь (пакетик)",unit:"шт",priceFor:"шт",category:"Упаковка",priceHistory:[{date:NOW,price:5}]},
+];
+const SEED_SEMIS=[
+  {id:1,name:"Рис для суши готовый",outputQty:1000,outputUnit:"г",
+    composition:[{productId:2,qty:450},{productId:9,qty:60},{productId:10,qty:30},{productId:11,qty:10}]},
+  {id:2,name:"Соевый соус готовый",outputQty:1000,outputUnit:"мл",
+    composition:[{productId:12,qty:200},{productId:11,qty:80},{productId:10,qty:20}]},
+  {id:3,name:"Сырный соус (для запечённых роллов)",outputQty:500,outputUnit:"г",
+    composition:[{productId:5,qty:300},{productId:13,qty:150},{productId:14,qty:50}]},
+  {id:4,name:"Спайси соус",outputQty:500,outputUnit:"г",
+    composition:[{productId:13,qty:400},{productId:7,qty:100}]},
+];
+const SEED_DISHES=[
+  {id:1,name:"Филадельфия",category:"Роллы",price:2900,weightOverride:null,
+    productLines:[{productId:1,brutto:90,loss:5},{productId:3,brutto:1,loss:0},{productId:4,brutto:50,loss:15},{productId:5,brutto:35,loss:0}],
+    semiLines:[{semiId:1,qty:130}],dishLines:[],packLines:[]},
+  {id:2,name:"Калифорния",category:"Роллы",price:2500,weightOverride:null,
+    productLines:[{productId:7,brutto:70,loss:3},{productId:3,brutto:1,loss:0},{productId:4,brutto:50,loss:15},{productId:8,brutto:6,loss:0}],
+    semiLines:[{semiId:1,qty:130}],dishLines:[],packLines:[]},
+  {id:3,name:"Сашими лосось",category:"Суши",price:2600,weightOverride:null,
+    productLines:[{productId:1,brutto:165,loss:9}],semiLines:[],dishLines:[],packLines:[]},
+  {id:4,name:"Маргарита",category:"Пицца",price:3200,weightOverride:null,
+    productLines:[{productId:15,brutto:200,loss:0},{productId:14,brutto:150,loss:0}],semiLines:[],dishLines:[],packLines:[]},
+  {id:5,name:"Чизбургер",category:"Бургеры",price:2200,weightOverride:null,
+    productLines:[{productId:17,brutto:150,loss:12},{productId:18,brutto:1,loss:0},{productId:14,brutto:30,loss:0}],semiLines:[],dishLines:[],packLines:[]},
+  {id:6,name:"Кола 0.5",category:"Напитки",price:800,weightOverride:500,
+    productLines:[{productId:19,brutto:120,loss:0}],semiLines:[],dishLines:[],packLines:[]},
+];
+
+// ════════════════════ STORAGE ════════════════════
+const LS={
+  get:(k,d)=>{try{const v=localStorage.getItem("ttk_"+k);return v?JSON.parse(v):d;}catch{return d;}},
+  set:(k,v)=>{try{localStorage.setItem("ttk_"+k,JSON.stringify(v));}catch{}},
+};
+
+// ════════════════════ UI АТОМЫ ════════════════════
+function Badge({color="gray",children}){
+  const m={green:{bg:C.greenSoft,fg:C.green},red:{bg:C.accentSoft,fg:C.accent},
+    yellow:{bg:C.yellowSoft,fg:C.yellow},blue:{bg:C.blueSoft,fg:C.blue},
+    purple:{bg:C.purpleSoft,fg:C.purple},teal:{bg:C.tealSoft,fg:C.teal},
+    gray:{bg:C.tag,fg:C.muted}};
+  const s=m[color]||m.gray;
+  return <span style={{background:s.bg,color:s.fg,borderRadius:20,padding:"2px 10px",fontSize:12,fontWeight:700,whiteSpace:"nowrap",display:"inline-block",border:`1px solid ${s.fg}33`}}>{children}</span>;
+}
+function Card({children,style,onClick}){
+  return <div onClick={onClick} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:14,padding:20,...style}}>{children}</div>;
+}
+function Btn({children,onClick,variant="primary",size="md",style,disabled}){
+  const bg={primary:C.accent,success:C.green,outline:"transparent",danger:C.accentSoft,ghost:"transparent",purple:C.purpleSoft,blue:C.blueSoft,teal:C.tealSoft}[variant]||C.accent;
+  const fg={primary:"#08090f",success:"#08090f",outline:C.text,danger:C.accent,ghost:C.muted,purple:C.purple,blue:C.blue,teal:C.teal}[variant]||"#08090f";
+  const bd={outline:`1px solid ${C.border}`,danger:`1px solid ${C.accent}`,purple:`1px solid ${C.purple}`,blue:`1px solid ${C.blue}`,teal:`1px solid ${C.teal}`}[variant]||"none";
+  const glow={primary:`0 0 16px ${C.accent}55`,success:`0 0 16px ${C.green}55`,teal:`0 0 16px ${C.teal}44`}[variant]||"none";
+  return <button onClick={onClick} disabled={disabled} style={{background:bg,color:fg,border:bd,boxShadow:glow,
+    padding:size==="sm"?"5px 12px":"9px 18px",fontSize:size==="sm"?12:14,fontWeight:700,opacity:disabled?.4:1,...style}}>{children}</button>;
+}
+function Modal({title,onClose,children,width=520}){
+  return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.85)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:300,padding:16,overflowY:"auto"}}>
+    <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:16,padding:24,width:"100%",maxWidth:width,maxHeight:"92vh",overflowY:"auto",margin:"auto"}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
+        <h3 style={{fontWeight:700,fontSize:17}}>{title}</h3>
+        <button onClick={onClose} style={{background:"none",color:C.muted,fontSize:24,lineHeight:1}}>×</button>
+      </div>
+      {children}
+    </div>
+  </div>;
+}
+function Field({label,children,hint}){
+  return <div style={{marginBottom:14}}>
+    <div style={{fontSize:11,color:C.muted,fontWeight:600,marginBottom:5,textTransform:"uppercase",letterSpacing:".4px"}}>{label}</div>
+    {children}
+    {hint&&<div style={{fontSize:11,color:C.muted,marginTop:3}}>{hint}</div>}
+  </div>;
+}
+function PriceTag({value,cost,price,size="md",kind="price"}){
+  const big=size==="lg";
+  const share=costSharePct(cost,price);
+  const markup=markupPct(cost,price);
+  const mainColor=kind==="cost"?C.blue:C.accent;
+  return <div style={{display:"inline-flex",flexDirection:"column",gap:2}}>
+    <span style={{fontWeight:800,fontSize:big?22:16,color:mainColor,textShadow:`0 0 12px ${mainColor}55`}}>{fmt(value)} ₸</span>
+    <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
+      <span style={{fontSize:10,fontWeight:700,color:C.blue,background:C.blueSoft,borderRadius:5,padding:"1px 6px"}}>{share}% себест.</span>
+      <span style={{fontSize:10,fontWeight:700,color:markup>=0?C.green:C.accent,background:markup>=0?C.greenSoft:C.accentSoft,borderRadius:5,padding:"1px 6px"}}>
+        {markup>=0?"+":""}{markup}% накр.
+      </span>
+    </div>
+  </div>;
+}
+
+// ════════════════════ REDUCER ════════════════════
+function reducer(state,action){
+  let next;
+  switch(action.type){
+    case"ADD_PRODUCT":       next={...state,products:[...state.products,action.v]};break;
+    case"ADD_PRODUCTS_BATCH":next={...state,products:[...state.products,...action.items]};break;
+    case"UPD_PRODUCT":       next={...state,products:state.products.map(p=>p.id===action.id?{...p,...action.patch}:p)};break;
+    case"DEL_PRODUCT":       next={...state,products:state.products.filter(p=>p.id!==action.id)};break;
+    case"ADD_PRICE":         next={...state,products:state.products.map(p=>p.id===action.id
+      ?{...p,priceHistory:[...(p.priceHistory||[]),{date:Date.now(),price:action.price}]}:p)};break;
+    case"ADD_SEMI":          next={...state,semis:[...state.semis,action.v]};break;
+    case"UPD_SEMI":          next={...state,semis:state.semis.map(s=>s.id===action.v.id?action.v:s)};break;
+    case"DEL_SEMI":          next={...state,semis:state.semis.filter(s=>s.id!==action.id)};break;
+    case"ADD_DISH":          next={...state,dishes:[...state.dishes,action.v]};break;
+    case"UPD_DISH":          next={...state,dishes:state.dishes.map(d=>d.id===action.v.id?action.v:d)};break;
+    case"DEL_DISH":          next={...state,dishes:state.dishes.filter(d=>d.id!==action.id)};break;
+    case"SET_DISH_PRICE":    next={...state,dishes:state.dishes.map(d=>d.id===action.id?{...d,price:action.price}:d)};break;
+    case"LOAD_ALL":          next={products:action.d.products||[],semis:action.d.semis||[],dishes:action.d.dishes||[]};break;
+    default:return state;
+  }
+  return next;
+}
+
+// ════════════════════ ИИ ИМПОРТ ПРОДУКТОВ ════════════════════
+const AI_SYSTEM=`Ты парсер продуктов для CRM суши-бара.
+Преобразуй список продуктов в JSON массив объектов.
+
+Каждый объект:
+{
+  "name": string,                        // название продукта
+  "category": "Рыба"|"Мясо"|"Овощи"|"Специи"|"Масла"|"Упаковка"|"Другое",
+  "unit": "г"|"мл"|"шт",               // единица хранения в рецептах
+  "priceFor": "кг"|"л"|"шт",           // за что указана цена при закупке
+  "price": number                        // цена закупки (0 если не указана)
+}
+
+Правила:
+- unit="г" для твёрдых продуктов (рыба, мясо, овощи, сыры, соусы в граммах)
+- unit="мл" для жидкостей (масла, соусы в мл, сиропы, напитки)
+- unit="шт" для штучных (нори, упаковка, булки, яйца)
+- priceFor="кг" если цена за кг, "л" если за литр, "шт" если за штуку
+- Категория "Упаковка": контейнеры, пакеты, палочки, соусники, пакетики, пленка
+- Категория "Масла": растительные масла, фритюрное, оливковое, кунжутное масло
+- Категория "Специи": соль, сахар, уксус, соевый соус, приправы, кунжут
+- Отвечай ТОЛЬКО валидным JSON массивом, без markdown блоков, без пояснений`;
+
+async function callAIImport(text){
+  const response=await fetch("https://api.anthropic.com/v1/messages",{
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({
+      model:"claude-sonnet-4-6",
+      max_tokens:1000,
+      system:AI_SYSTEM,
+      messages:[{role:"user",content:`Список продуктов:\n${text}`}]
+    })
+  });
+  if(!response.ok){
+    const err=await response.json().catch(()=>({}));
+    throw new Error(err.error?.message||`HTTP ${response.status}`);
+  }
+  const data=await response.json();
+  const raw=data.content.map(i=>i.text||"").join("").trim();
+  const clean=raw.replace(/^```json\s*/,"").replace(/^```\s*/,"").replace(/\s*```$/,"").trim();
+  return JSON.parse(clean);
+}
+
+// ════════════════════ ТАБ: ПРОДУКТЫ ════════════════════
+function ProductsTab({state,dispatch}){
+  const {products}=state;
+  const [search,setSearch]=useState("");
+  const [catFilter,setCatFilter]=useState("all");
+  const [showForm,setShowForm]=useState(false);
+  const [showPrice,setShowPrice]=useState(null);
+  const [showHistory,setShowHistory]=useState(null);
+  const [editId,setEditId]=useState(null);
+  const [newPrice,setNewPrice]=useState("");
+  const empty={name:"",unit:"г",priceFor:"кг",category:PRODUCT_CATEGORIES[0]};
+  const [form,setForm]=useState(empty);
+
+  // ── ИИ ИМПОРТ ──
+  const [showAI,setShowAI]=useState(false);
+  const [aiText,setAIText]=useState("");
+  const [aiRows,setAIRows]=useState([]);   // [{...parsed, _id, _sel}]
+  const [aiLoading,setAILoading]=useState(false);
+  const [aiError,setAIError]=useState("");
+  const [aiDone,setAIDone]=useState(false);
+
+  const filtered=products.filter(p=>
+    (catFilter==="all"||p.category===catFilter)&&
+    p.name.toLowerCase().includes(search.toLowerCase())
+  );
+
+  function openAdd(){setForm(empty);setEditId(null);setShowForm(true);}
+  function openEdit(p){setForm({name:p.name,unit:p.unit,priceFor:p.priceFor,category:p.category||PRODUCT_CATEGORIES[0]});setEditId(p.id);setShowForm(true);}
+  function save(){
+    if(!form.name)return;
+    if(editId)dispatch({type:"UPD_PRODUCT",id:editId,patch:form});
+    else dispatch({type:"ADD_PRODUCT",v:{...form,id:uid(),priceHistory:[]}});
+    setShowForm(false);
+  }
+  function del(id){
+    const usedInSemi=state.semis.some(s=>s.composition?.some(c=>c.productId===id));
+    const usedInDish=state.dishes.some(d=>d.productLines?.some(l=>l.productId===id));
+    if(usedInSemi||usedInDish){alert("Нельзя удалить — продукт используется в полуфабрикатах или блюдах. Сначала уберите его оттуда.");return;}
+    if(confirm("Удалить продукт?"))dispatch({type:"DEL_PRODUCT",id});
+  }
+  function addPrice(pid){
+    if(!newPrice)return;
+    dispatch({type:"ADD_PRICE",id:pid,price:+newPrice});
+    setNewPrice("");setShowPrice(null);
+  }
+
+  // ── ИИ: распознать ──
+  async function runAI(){
+    if(!aiText.trim())return;
+    setAILoading(true);setAIError("");setAIRows([]);setAIDone(false);
+    try{
+      const parsed=await callAIImport(aiText);
+      if(!Array.isArray(parsed)||!parsed.length){setAIError("ИИ не смог найти продукты. Проверьте текст и попробуйте снова.");setAILoading(false);return;}
+      setAIRows(parsed.map((p,i)=>({...p,_id:i,_sel:true,price:p.price||0})));
+    }catch(e){
+      setAIError("Ошибка: "+(e.message||"попробуйте ещё раз"));
+    }
+    setAILoading(false);
+  }
+
+  // ── ИИ: добавить выбранные ──
+  function addSelected(){
+    const toAdd=aiRows.filter(r=>r._sel);
+    if(!toAdd.length)return;
+    const items=toAdd.map(r=>({
+      id:uid(),name:r.name,unit:r.unit,priceFor:r.priceFor,
+      category:r.category,
+      priceHistory:r.price>0?[{date:Date.now(),price:r.price}]:[]
+    }));
+    dispatch({type:"ADD_PRODUCTS_BATCH",items});
+    setAIDone(true);
+  }
+
+  function closeAI(){setShowAI(false);setAIText("");setAIRows([]);setAIError("");setAILoading(false);setAIDone(false);}
+
+  function updRow(i,patch){setAIRows(prev=>prev.map((r,j)=>j===i?{...r,...patch}:r));}
+  const selCount=aiRows.filter(r=>r._sel).length;
+  const allSel=aiRows.length>0&&aiRows.every(r=>r._sel);
+
+  const histProd=showHistory?products.find(p=>p.id===showHistory):null;
+  const priceProd=showPrice?products.find(p=>p.id===showPrice):null;
+
+  return <div>
+    {/* ── Хедер ── */}
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8,flexWrap:"wrap",gap:10}}>
+      <div>
+        <h2 style={{fontSize:20,fontWeight:700}}>Продукты и цены</h2>
+        <p style={{color:C.muted,fontSize:13,marginTop:2}}>Базовый уровень — отсюда считается всё остальное</p>
+      </div>
+      <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+        <Btn variant="teal" onClick={()=>setShowAI(true)}>✨ Импорт через ИИ</Btn>
+        <Btn onClick={openAdd}>+ Добавить продукт</Btn>
+      </div>
+    </div>
+
+    <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Поиск…" style={{maxWidth:280,margin:"16px 0 12px"}}/>
+    <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:16}}>
+      <button onClick={()=>setCatFilter("all")}
+        style={{background:catFilter==="all"?C.accent:C.card,color:catFilter==="all"?"#08090f":C.muted,
+          border:`1px solid ${C.border}`,borderRadius:8,padding:"6px 14px",fontSize:13,fontWeight:700}}>Все</button>
+      {PRODUCT_CATEGORIES.map(cat=><button key={cat} onClick={()=>setCatFilter(cat)}
+        style={{background:catFilter===cat?C.accent:C.card,color:catFilter===cat?"#08090f":C.muted,
+          border:`1px solid ${C.border}`,borderRadius:8,padding:"6px 14px",fontSize:13,fontWeight:600}}>{cat}</button>)}
+    </div>
+
+    <div style={{overflowX:"auto"}}>
+      <table>
+        <thead><tr><th>Продукт</th><th>Категория</th><th>Ед. хранения</th><th>Цена указ. за</th><th>Текущая цена</th><th></th></tr></thead>
+        <tbody>
+          {filtered.map(p=>{
+            const last=p.priceHistory?.[p.priceHistory.length-1]?.price||0;
+            const prev=p.priceHistory?.[p.priceHistory.length-2]?.price;
+            const trend=prev?(last>prev?"↑":last<prev?"↓":"→"):"";
+            const trendColor=prev?(last>prev?C.accent:C.green):C.muted;
+            return <tr key={p.id}>
+              <td style={{fontWeight:600}}>{p.name}</td>
+              <td><Badge color="purple">{p.category||"—"}</Badge></td>
+              <td><Badge color="gray">{p.unit}</Badge></td>
+              <td style={{color:C.muted}}>{p.priceFor}</td>
+              <td>
+                {last>0
+                  ?<><span style={{fontWeight:800,fontSize:15,color:C.blue,textShadow:`0 0 8px ${C.blue}44`}}>{fmt(last)} ₸/{p.priceFor}</span>
+                    {trend&&<span style={{color:trendColor,marginLeft:8,fontWeight:800,fontSize:15,textShadow:`0 0 8px ${trendColor}66`}}>{trend}</span>}</>
+                  :<span style={{color:C.muted,fontSize:13}}>— нет цены</span>}
+              </td>
+              <td>
+                <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
+                  <Btn size="sm" variant="purple" onClick={()=>{setShowPrice(p.id);setNewPrice("");}}>₸ Цена</Btn>
+                  <Btn size="sm" variant="ghost" onClick={()=>setShowHistory(p.id)}>📋</Btn>
+                  <Btn size="sm" variant="outline" onClick={()=>openEdit(p)}>✏</Btn>
+                  <Btn size="sm" variant="danger" onClick={()=>del(p.id)}>✕</Btn>
+                </div>
+              </td>
+            </tr>;
+          })}
+        </tbody>
+      </table>
+      {!filtered.length&&<p style={{textAlign:"center",color:C.muted,padding:32}}>Ничего не найдено</p>}
+    </div>
+
+    {/* ══ МОДАЛ: ИИ ИМПОРТ ══ */}
+    {showAI&&<Modal title="✨ Импорт продуктов через ИИ" onClose={closeAI} width={780}>
+      {!aiDone&&<>
+        <p style={{color:C.muted,fontSize:13,marginBottom:14,lineHeight:1.6}}>
+          Вставьте список продуктов в любом удобном формате — ИИ сам определит названия, категории, единицы измерения и цены.
+        </p>
+        <div style={{background:C.tealSoft,border:`1px solid ${C.teal}44`,borderRadius:10,padding:"10px 14px",fontSize:12,color:C.teal,marginBottom:16,lineHeight:1.7}}>
+          <b>Примеры форматов:</b><br/>
+          • Лосось — 5 900 ₸/кг, Тунец — 7 200 ₸/кг, Нори 18 тг/шт<br/>
+          • Огурец: 400 тенге за кг; Авокадо: 2200/кг; Крем-сыр: 3500/кг<br/>
+          • Масло фритюрное 990 тнг/л, Контейнер пластиковый 50тг шт, Палочки 8/шт
+        </div>
+
+        {!aiRows.length&&<>
+          <Field label="Список продуктов">
+            <textarea value={aiText} onChange={e=>setAIText(e.target.value)} rows={7}
+              placeholder={"Лосось — 5 900 ₸/кг\nТунец — 7 200 ₸/кг\nНори 18 тг/шт\nАвокадо — 2 200 тг/кг\nОгурец 400/кг\nКрем-сыр 3 500 тнг/кг\nМасло фритюрное 990 тнг/л\nКонтейнер пластик 50 тг/шт\nПалочки деревянные 8/шт"}
+              style={{resize:"vertical",fontFamily:"monospace",fontSize:13}}/>
+          </Field>
+          {aiError&&<div style={{color:C.accent,background:C.accentSoft,border:`1px solid ${C.accent}44`,borderRadius:8,padding:"8px 12px",fontSize:13,marginBottom:12}}>⚠ {aiError}</div>}
+          <div style={{display:"flex",gap:8}}>
+            <Btn onClick={runAI} disabled={aiLoading||!aiText.trim()} style={{flex:1,fontSize:15,padding:"11px"}}>
+              {aiLoading?<><span className="ai-spin">⚙</span> Распознаю…</>:"✨ Распознать список"}
+            </Btn>
+            <Btn variant="outline" onClick={closeAI}>Отмена</Btn>
+          </div>
+          {aiLoading&&<div style={{marginTop:12,textAlign:"center",color:C.teal,fontSize:13}}>
+            ИИ анализирует список…
+          </div>}
+        </>}
+
+        {/* Таблица результатов */}
+        {aiRows.length>0&&<>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+            <div style={{fontWeight:700,fontSize:15}}>
+              Найдено <span style={{color:C.teal}}>{aiRows.length}</span> продуктов
+              <span style={{color:C.muted,fontWeight:400,fontSize:13,marginLeft:8}}>— проверьте и отредактируйте при необходимости</span>
+            </div>
+            <Btn size="sm" variant="ghost" onClick={()=>setAIRows([])}>← Изменить текст</Btn>
+          </div>
+
+          {aiError&&<div style={{color:C.accent,background:C.accentSoft,border:`1px solid ${C.accent}44`,borderRadius:8,padding:"8px 12px",fontSize:13,marginBottom:12}}>⚠ {aiError}</div>}
+
+          <div style={{overflowX:"auto",marginBottom:14,border:`1px solid ${C.border}`,borderRadius:10,overflow:"hidden"}}>
+            <table>
+              <thead><tr>
+                <th style={{width:36}}>
+                  <input type="checkbox" checked={allSel}
+                    onChange={e=>setAIRows(prev=>prev.map(r=>({...r,_sel:e.target.checked})))}
+                    style={{width:"auto",cursor:"pointer"}}/>
+                </th>
+                <th>Название</th>
+                <th>Категория</th>
+                <th>Ед.</th>
+                <th>Цена за</th>
+                <th>Цена закупки</th>
+              </tr></thead>
+              <tbody>
+                {aiRows.map((r,i)=><tr key={r._id} style={{opacity:r._sel?1:.4,transition:"opacity .2s"}}>
+                  <td>
+                    <input type="checkbox" checked={r._sel}
+                      onChange={e=>updRow(i,{_sel:e.target.checked})}
+                      style={{width:"auto",cursor:"pointer"}}/>
+                  </td>
+                  <td>
+                    <input value={r.name} onChange={e=>updRow(i,{name:e.target.value})}
+                      style={{padding:"4px 8px",fontSize:13,minWidth:160}}/>
+                  </td>
+                  <td>
+                    <select value={r.category} onChange={e=>updRow(i,{category:e.target.value})}
+                      style={{padding:"4px 8px",fontSize:13,width:"auto",minWidth:100}}>
+                      {PRODUCT_CATEGORIES.map(c=><option key={c}>{c}</option>)}
+                    </select>
+                  </td>
+                  <td>
+                    <select value={r.unit} onChange={e=>updRow(i,{unit:e.target.value})}
+                      style={{padding:"4px 8px",fontSize:13,width:"auto"}}>
+                      {["г","мл","шт"].map(u=><option key={u}>{u}</option>)}
+                    </select>
+                  </td>
+                  <td>
+                    <select value={r.priceFor} onChange={e=>updRow(i,{priceFor:e.target.value})}
+                      style={{padding:"4px 8px",fontSize:13,width:"auto"}}>
+                      {["кг","л","шт"].map(u=><option key={u}>{u}</option>)}
+                    </select>
+                  </td>
+                  <td>
+                    <div style={{display:"flex",alignItems:"center",gap:6}}>
+                      <input type="number" value={r.price} onChange={e=>updRow(i,{price:+e.target.value})}
+                        style={{padding:"4px 8px",fontSize:13,width:90}} min="0"/>
+                      <span style={{color:C.muted,fontSize:12,whiteSpace:"nowrap"}}>₸/{r.priceFor}</span>
+                    </div>
+                  </td>
+                </tr>)}
+              </tbody>
+            </table>
+          </div>
+
+          <div style={{display:"flex",gap:8,alignItems:"center"}}>
+            <Btn onClick={addSelected} disabled={!selCount}
+              style={{flex:1,fontSize:15,padding:"11px",boxShadow:`0 0 20px ${C.green}44`}}
+              variant="success">
+              ✓ Добавить {selCount} {selCount===1?"продукт":selCount<5?"продукта":"продуктов"}
+            </Btn>
+            <Btn variant="outline" onClick={closeAI}>Отмена</Btn>
+          </div>
+        </>}
+      </>}
+
+      {/* Экран успеха */}
+      {aiDone&&<div style={{textAlign:"center",padding:"32px 16px"}}>
+        <div style={{fontSize:52,marginBottom:16}}>✅</div>
+        <div style={{fontWeight:700,fontSize:20,marginBottom:8}}>Продукты добавлены!</div>
+        <div style={{color:C.muted,fontSize:14,marginBottom:24}}>
+          Добавлено {selCount} {selCount===1?"продукт":selCount<5?"продукта":"продуктов"}.
+          Теперь укажите цены через кнопку <b style={{color:C.purple}}>₸ Цена</b> в таблице.
+        </div>
+        <div style={{display:"flex",gap:8,justifyContent:"center",flexWrap:"wrap"}}>
+          <Btn onClick={()=>{setAIRows([]);setAIText("");setAIDone(false);}}>✨ Добавить ещё</Btn>
+          <Btn variant="outline" onClick={closeAI}>Закрыть</Btn>
+        </div>
+      </div>}
+    </Modal>}
+
+    {/* ══ МОДАЛ: Добавить/редактировать продукт ══ */}
+    {showForm&&<Modal title={editId?"Редактировать продукт":"Новый продукт"} onClose={()=>setShowForm(false)} width={420}>
+      <Field label="Название"><input value={form.name} onChange={e=>setForm(f=>({...f,name:e.target.value}))} placeholder="Лосось филе"/></Field>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12}}>
+        <Field label="Категория">
+          <select value={form.category} onChange={e=>setForm(f=>({...f,category:e.target.value}))}>
+            {PRODUCT_CATEGORIES.map(c=><option key={c}>{c}</option>)}
+          </select>
+        </Field>
+        <Field label="Единица хранения" hint="в рецептах">
+          <select value={form.unit} onChange={e=>setForm(f=>({...f,unit:e.target.value}))}>
+            {["г","мл","шт"].map(u=><option key={u}>{u}</option>)}
+          </select>
+        </Field>
+        <Field label="Цена за" hint="как закупаете">
+          <select value={form.priceFor} onChange={e=>setForm(f=>({...f,priceFor:e.target.value}))}>
+            {["кг","л","шт"].map(u=><option key={u}>{u}</option>)}
+          </select>
+        </Field>
+      </div>
+      <div style={{display:"flex",gap:8,marginTop:4}}>
+        <Btn onClick={save} style={{flex:1}}>{editId?"Сохранить":"Создать"}</Btn>
+        <Btn variant="outline" onClick={()=>setShowForm(false)}>Отмена</Btn>
+      </div>
+    </Modal>}
+
+    {/* ══ МОДАЛ: Новая цена ══ */}
+    {showPrice&&priceProd&&<Modal title={`Новая цена: ${priceProd.name}`} onClose={()=>setShowPrice(null)} width={360}>
+      <div style={{background:C.card,borderRadius:10,padding:14,marginBottom:16}}>
+        <div style={{fontSize:12,color:C.muted}}>Текущая цена</div>
+        <div style={{fontWeight:700,fontSize:20,marginTop:4,color:C.blue}}>
+          {fmt(priceProd.priceHistory?.[priceProd.priceHistory.length-1]?.price||0)} ₸/{priceProd.priceFor}
+        </div>
+      </div>
+      <Field label={`Новая цена (₸/${priceProd.priceFor})`}>
+        <input type="number" value={newPrice} onChange={e=>setNewPrice(e.target.value)} autoFocus/>
+      </Field>
+      {newPrice&&<div style={{background:C.purpleSoft,border:`1px solid ${C.purple}66`,borderRadius:8,padding:10,marginBottom:12,fontSize:13}}>
+        <span style={{color:C.purple,fontWeight:700}}>Изменение: </span>
+        <span style={{fontWeight:800,color:(+newPrice-(priceProd.priceHistory?.[priceProd.priceHistory.length-1]?.price||0))>0?C.accent:C.green}}>
+          {(+newPrice-(priceProd.priceHistory?.[priceProd.priceHistory.length-1]?.price||0))>0?"+":""}
+          {fmt(+newPrice-(priceProd.priceHistory?.[priceProd.priceHistory.length-1]?.price||0))} ₸
+        </span>
+      </div>}
+      <div style={{background:C.yellowSoft,border:`1px solid ${C.yellow}`,borderRadius:8,padding:10,marginBottom:14,fontSize:12,color:C.yellow}}>
+        ⚡ После обновления себестоимость всех полуфабрикатов и блюд пересчитается автоматически
+      </div>
+      <div style={{display:"flex",gap:8}}>
+        <Btn onClick={()=>addPrice(priceProd.id)} variant="purple" style={{flex:1}}>Обновить цену</Btn>
+        <Btn variant="outline" onClick={()=>setShowPrice(null)}>Отмена</Btn>
+      </div>
+    </Modal>}
+
+    {/* ══ МОДАЛ: История цен ══ */}
+    {showHistory&&histProd&&<Modal title={`История цен: ${histProd.name}`} onClose={()=>setShowHistory(null)} width={400}>
+      {histProd.priceHistory?.length?<table>
+        <thead><tr><th>Дата</th><th>Цена</th><th>Изм.</th></tr></thead>
+        <tbody>
+          {[...(histProd.priceHistory||[])].reverse().map((h,i,arr)=>{
+            const prev=arr[i+1];const diff=prev?h.price-prev.price:null;
+            return <tr key={h.date}>
+              <td>{fmtDate(h.date)}</td>
+              <td style={{fontWeight:600,color:C.blue}}>{fmt(h.price)} ₸</td>
+              <td style={{color:diff===null?C.muted:diff>0?C.accent:C.green}}>
+                {diff===null?"—":diff>0?`+${fmt(diff)}`:`${fmt(diff)}`}
+              </td>
+            </tr>;
+          })}
+        </tbody>
+      </table>:<p style={{color:C.muted,textAlign:"center",padding:24}}>Цены ещё не указаны</p>}
+    </Modal>}
+  </div>;
+}
+
+// ════════════════════ ТАБ: ПОЛУФАБРИКАТЫ ════════════════════
+function SemisTab({state,dispatch}){
+  const {semis,products}=state;
+  const [search,setSearch]=useState("");
+  const [showForm,setShowForm]=useState(false);
+  const [editId,setEditId]=useState(null);
+
+  const emptyForm={name:"",outputUnit:"г",outputQtyOverride:"",composition:[],semiLines:[]};
+  const [form,setForm]=useState(emptyForm);
+  const [pRow,setPRow]=useState({productId:"",qty:""});
+  const [sRow,setSRow]=useState({semiId:"",qty:""});
+
+  const filtered=semis.filter(s=>s.name.toLowerCase().includes(search.toLowerCase()));
+
+  // ── расчёт для формы ──
+  const formBatchCost=
+    form.composition.reduce((s,c)=>{const p=products.find(p=>p.id===c.productId);return s+(p?productUnitCost(p)*c.qty:0);},0)+
+    form.semiLines.reduce((s,r)=>{const sm=semis.find(sm=>sm.id===r.semiId);return s+(sm?semiCostPerUnit(sm,products,semis)*r.qty:0);},0);
+
+  const formInputQty=
+    form.composition.reduce((s,c)=>s+(+c.qty||0),0)+
+    form.semiLines.reduce((s,r)=>s+(+r.qty||0),0);
+
+  const formOutputQty=form.outputQtyOverride?+form.outputQtyOverride:formInputQty;
+  const formCostPerKg=formOutputQty>0?(formBatchCost/formOutputQty)*1000:0;
+
+  function openAdd(){setForm(emptyForm);setEditId(null);setPRow({productId:"",qty:""});setSRow({semiId:"",qty:""});setShowForm(true);}
+  function openEdit(s){
+    setForm({name:s.name,outputUnit:s.outputUnit,
+      outputQtyOverride:s.outputQtyOverride?String(s.outputQtyOverride):"",
+      composition:(s.composition||[]).map(c=>({...c})),
+      semiLines:(s.semiLines||[]).map(r=>({...r}))});
+    setEditId(s.id);setPRow({productId:"",qty:""});setSRow({semiId:"",qty:""});setShowForm(true);
+  }
+
+  // продукты
+  function addPRow(){if(!pRow.productId||!pRow.qty)return;setForm(f=>({...f,composition:[...f.composition,{productId:+pRow.productId,qty:+pRow.qty}]}));setPRow({productId:"",qty:""});}
+  function updPRow(pid,val){setForm(f=>({...f,composition:f.composition.map(c=>c.productId===pid?{...c,qty:+val}:c)}));}
+  function delPRow(pid){setForm(f=>({...f,composition:f.composition.filter(c=>c.productId!==pid)}));}
+
+  // полуфабрикаты
+  function addSRow(){if(!sRow.semiId||!sRow.qty)return;setForm(f=>({...f,semiLines:[...f.semiLines,{semiId:+sRow.semiId,qty:+sRow.qty}]}));setSRow({semiId:"",qty:""});}
+  function updSRow(sid,val){setForm(f=>({...f,semiLines:f.semiLines.map(r=>r.semiId===sid?{...r,qty:+val}:r)}));}
+  function delSRow(sid){setForm(f=>({...f,semiLines:f.semiLines.filter(r=>r.semiId!==sid)}));}
+
+  function save(){
+    if(!form.name||(form.composition.length===0&&form.semiLines.length===0))return;
+    const item={...form,id:editId||uid(),outputQtyOverride:form.outputQtyOverride?+form.outputQtyOverride:null};
+    if(editId)dispatch({type:"UPD_SEMI",v:item});
+    else dispatch({type:"ADD_SEMI",v:item});
+    setShowForm(false);
+  }
+  function del(id){
+    const inDish=state.dishes.some(d=>d.semiLines?.some(l=>l.semiId===id));
+    const inSemi=semis.some(s=>s.id!==id&&(s.semiLines||[]).some(r=>r.semiId===id));
+    if(inDish||inSemi){alert("Нельзя удалить — используется в блюдах или других полуфабрикатах.");return;}
+    if(confirm("Удалить полуфабрикат?"))dispatch({type:"DEL_SEMI",id});
+  }
+
+  // полуфабрикаты доступные для добавления (без текущего и без уже добавленных)
+  const availSemis=semis.filter(s=>s.id!==editId&&!form.semiLines.find(r=>r.semiId===s.id));
+
+  const inputStyle={width:75,padding:"4px 8px",fontSize:13,borderRadius:6};
+
+  return <div>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+      <div>
+        <h2 style={{fontSize:20,fontWeight:700}}>Соуса и полуфабрикаты</h2>
+        <p style={{color:C.muted,fontSize:13,marginTop:2}}>
+          Вводите любые ингредиенты — цена за 1 кг/л считается автоматически
+        </p>
+      </div>
+      <Btn onClick={openAdd}>+ Новый полуфабрикат</Btn>
+    </div>
+    <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Поиск…" style={{maxWidth:280,margin:"16px 0"}}/>
+
+    {/* ── Карточки ── */}
+    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(310px,1fr))",gap:12}}>
+      {filtered.map(s=>{
+        const batch=semiBatchCost(s,products,semis);
+        const inputQty=semiTotalInputQty(s);
+        const outQty=s.outputQtyOverride||inputQty||s.outputQty;
+        const perKg=outQty>0?(batch/outQty)*1000:0;
+        const unit=s.outputUnit==="г"?"кг":"л";
+        return <Card key={s.id} style={{border:`1px solid ${C.purple}44`,boxShadow:`0 4px 20px rgba(177,74,255,.08)`}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}>
+            <div style={{fontWeight:700,fontSize:15,flex:1,marginRight:8}}>{s.name}</div>
+            <Badge color="purple">{outQty} {s.outputUnit}</Badge>
+          </div>
+
+          {/* Метрики */}
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12,
+            background:C.surface,borderRadius:10,padding:"10px 14px"}}>
+            <div>
+              <div style={{fontSize:10,color:C.muted,textTransform:"uppercase",fontWeight:700,marginBottom:2}}>Партия ({outQty}{s.outputUnit})</div>
+              <div style={{fontWeight:800,fontSize:16,color:C.blue,textShadow:`0 0 10px ${C.blue}44`}}>{fmt(batch)} ₸</div>
+            </div>
+            <div>
+              <div style={{fontSize:10,color:C.muted,textTransform:"uppercase",fontWeight:700,marginBottom:2}}>За 1 {unit}</div>
+              <div style={{fontWeight:800,fontSize:16,color:C.purple,textShadow:`0 0 10px ${C.purple}55`}}>{fmt(perKg)} ₸</div>
+            </div>
+          </div>
+
+          {/* Состав */}
+          <div style={{fontSize:11,color:C.muted,fontWeight:700,textTransform:"uppercase",marginBottom:6}}>Состав</div>
+          <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:12}}>
+            {(s.composition||[]).map(c=>{
+              const p=products.find(p=>p.id===c.productId);
+              return p?<span key={c.productId} style={{background:C.tag,borderRadius:20,padding:"3px 10px",fontSize:12,border:`1px solid ${C.border}`}}>
+                🥦 {p.name} {c.qty}{p.unit}
+              </span>:null;
+            })}
+            {(s.semiLines||[]).map(r=>{
+              const sm=semis.find(sm=>sm.id===r.semiId);
+              return sm?<span key={r.semiId} style={{background:C.purpleSoft,borderRadius:20,padding:"3px 10px",fontSize:12,color:C.purple,border:`1px solid ${C.purple}44`}}>
+                🥣 {sm.name} {r.qty}{sm.outputUnit}
+              </span>:null;
+            })}
+          </div>
+
+          <div style={{display:"flex",gap:6}}>
+            <Btn size="sm" variant="outline" onClick={()=>openEdit(s)}>✏ Изменить</Btn>
+            <Btn size="sm" variant="danger" onClick={()=>del(s.id)}>✕ Удалить</Btn>
+          </div>
+        </Card>;
+      })}
+    </div>
+
+    {!filtered.length&&<Card><p style={{color:C.muted,textAlign:"center",padding:24}}>Полуфабрикаты ещё не добавлены</p></Card>}
+
+    {/* ══ ФОРМА ══ */}
+    {showForm&&<Modal title={editId?"Редактировать полуфабрикат":"Новый полуфабрикат"} onClose={()=>setShowForm(false)} width={660}>
+
+      {/* Название + единица */}
+      <div style={{display:"grid",gridTemplateColumns:"1fr auto",gap:12,marginBottom:16}}>
+        <Field label="Название">
+          <input value={form.name} onChange={e=>setForm(f=>({...f,name:e.target.value}))} placeholder="Рис для суши готовый, Спайси соус…"/>
+        </Field>
+        <Field label="Единица" hint="кг или л">
+          <select value={form.outputUnit} onChange={e=>setForm(f=>({...f,outputUnit:e.target.value}))} style={{width:70}}>
+            <option value="г">г → кг</option>
+            <option value="мл">мл → л</option>
+          </select>
+        </Field>
+      </div>
+
+      {/* ── Ингредиенты из продуктов ── */}
+      <div style={{fontWeight:700,fontSize:13,marginBottom:8,paddingTop:8,borderTop:`1px solid ${C.border}`,
+        display:"flex",alignItems:"center",gap:8}}>
+        🥦 <span>Продукты</span>
+        {form.composition.length>0&&<Badge color="gray">{form.composition.length}</Badge>}
+      </div>
+
+      {form.composition.length>0&&<div style={{marginBottom:10}}>
+        {form.composition.map(c=>{
+          const p=products.find(p=>p.id===c.productId);if(!p)return null;
+          return <div key={c.productId} style={{background:C.card,borderRadius:10,padding:"10px 12px",
+            marginBottom:6,border:`1px solid ${C.border}`}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+              <span style={{fontWeight:600,fontSize:13,flex:1,marginRight:8}}>{p.name}</span>
+              <button onClick={()=>delPRow(c.productId)} style={{background:C.accentSoft,color:C.accent,
+                border:`1px solid ${C.accent}55`,borderRadius:8,padding:"4px 10px",
+                fontSize:12,fontWeight:700,cursor:"pointer",flexShrink:0,whiteSpace:"nowrap"}}>× Удалить</button>
+            </div>
+            <div style={{display:"flex",alignItems:"center",gap:8}}>
+              <input type="number" value={c.qty} min="0"
+                onChange={e=>updPRow(c.productId,e.target.value)}
+                style={{width:90,padding:"6px 10px",fontSize:14,borderRadius:8,
+                  background:C.surface,border:`1px solid ${C.border}`,color:C.text}}/>
+              <span style={{color:C.muted,fontSize:13}}>{p.unit}</span>
+              <span style={{marginLeft:"auto",color:C.blue,fontWeight:700,fontSize:13}}>
+                {fmt(productUnitCost(p)*c.qty)} ₸
+              </span>
+            </div>
+          </div>;
+        })}
+      </div>}
+
+      {/* Добавить продукт */}
+      <div style={{background:C.card,borderRadius:10,padding:12,marginBottom:14}}>
+        <div style={{fontSize:12,color:C.muted,fontWeight:700,textTransform:"uppercase",marginBottom:8}}>Добавить продукт</div>
+        <Field label="Продукт">
+          <select value={pRow.productId} onChange={e=>setPRow(r=>({...r,productId:e.target.value}))}>
+            <option value="">— выберите —</option>
+            {products.filter(p=>!form.composition.find(c=>c.productId===p.id)).map(p=>
+              <option key={p.id} value={p.id}>{p.name} ({p.unit})</option>)}
+          </select>
+        </Field>
+        <div style={{display:"flex",gap:8,alignItems:"flex-end"}}>
+          <Field label="Количество" style={{flex:1}}>
+            <input type="number" value={pRow.qty} min="0"
+              onChange={e=>setPRow(r=>({...r,qty:e.target.value}))} placeholder="200"/>
+          </Field>
+          <div style={{paddingBottom:14}}>
+            <Btn onClick={addPRow} disabled={!pRow.productId||!pRow.qty} style={{whiteSpace:"nowrap"}}>+ Добавить</Btn>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Ингредиенты из полуфабрикатов ── */}
+      <div style={{fontWeight:700,fontSize:13,marginBottom:8,paddingTop:8,borderTop:`1px solid ${C.border}`,
+        display:"flex",alignItems:"center",gap:8}}>
+        🥣 <span>Полуфабрикаты</span>
+        {form.semiLines.length>0&&<Badge color="purple">{form.semiLines.length}</Badge>}
+      </div>
+
+      {form.semiLines.length>0&&<div style={{marginBottom:10}}>
+        {form.semiLines.map(r=>{
+          const sm=semis.find(sm=>sm.id===r.semiId);if(!sm)return null;
+          const cost=semiCostPerUnit(sm,products,semis)*r.qty;
+          return <div key={r.semiId} style={{background:C.purpleSoft,borderRadius:10,padding:"10px 12px",
+            marginBottom:6,border:`1px solid ${C.purple}44`}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+              <span style={{fontWeight:600,fontSize:13,flex:1,marginRight:8,color:C.purple}}>{sm.name}</span>
+              <button onClick={()=>delSRow(r.semiId)} style={{background:C.accentSoft,color:C.accent,
+                border:`1px solid ${C.accent}55`,borderRadius:8,padding:"4px 10px",
+                fontSize:12,fontWeight:700,cursor:"pointer",flexShrink:0,whiteSpace:"nowrap"}}>× Удалить</button>
+            </div>
+            <div style={{display:"flex",alignItems:"center",gap:8}}>
+              <input type="number" value={r.qty} min="0"
+                onChange={e=>updSRow(r.semiId,e.target.value)}
+                style={{width:90,padding:"6px 10px",fontSize:14,borderRadius:8,
+                  background:C.surface,border:`1px solid ${C.purple}55`,color:C.text}}/>
+              <span style={{color:C.muted,fontSize:13}}>{sm.outputUnit}</span>
+              <span style={{marginLeft:"auto",color:C.purple,fontWeight:700,fontSize:13}}>{fmt(cost)} ₸</span>
+            </div>
+          </div>;
+        })}
+      </div>}
+
+      {/* Добавить полуфабрикат */}
+      {availSemis.length>0&&<div style={{background:C.card,borderRadius:10,padding:12,marginBottom:14}}>
+        <div style={{fontSize:12,color:C.purple,fontWeight:700,textTransform:"uppercase",marginBottom:8}}>Добавить полуфабрикат</div>
+        <Field label="Полуфабрикат">
+          <select value={sRow.semiId} onChange={e=>setSRow(r=>({...r,semiId:e.target.value}))}>
+            <option value="">— выберите —</option>
+            {availSemis.map(sm=><option key={sm.id} value={sm.id}>{sm.name} ({sm.outputUnit})</option>)}
+          </select>
+        </Field>
+        <div style={{display:"flex",gap:8,alignItems:"flex-end"}}>
+          <Field label="Количество" style={{flex:1}}>
+            <input type="number" value={sRow.qty} min="0"
+              onChange={e=>setSRow(r=>({...r,qty:e.target.value}))} placeholder="100"/>
+          </Field>
+          <div style={{paddingBottom:14}}>
+            <Btn onClick={addSRow} disabled={!sRow.semiId||!sRow.qty} variant="purple" style={{whiteSpace:"nowrap"}}>+ Добавить</Btn>
+          </div>
+        </div>
+      </div>}
+
+      {/* ── Итог и выход ── */}
+      {(form.composition.length>0||form.semiLines.length>0)&&<>
+        <div style={{background:`linear-gradient(135deg,${C.purpleSoft},${C.blueSoft})`,
+          border:`1px solid ${C.purple}66`,borderRadius:12,padding:14,marginBottom:14}}>
+          <div style={{display:"flex",gap:24,flexWrap:"wrap",alignItems:"flex-start"}}>
+            <div>
+              <div style={{fontSize:10,color:C.muted,textTransform:"uppercase",fontWeight:700,marginBottom:3}}>Стоимость партии</div>
+              <div style={{fontWeight:800,fontSize:18,color:C.blue,textShadow:`0 0 10px ${C.blue}55`}}>{fmt(formBatchCost)} ₸</div>
+            </div>
+            <div>
+              <div style={{fontSize:10,color:C.muted,textTransform:"uppercase",fontWeight:700,marginBottom:3}}>
+                Вход (сумма ингред.)
+              </div>
+              <div style={{fontWeight:800,fontSize:18}}>{fmt2(formInputQty)} {form.outputUnit}</div>
+            </div>
+            <div>
+              <div style={{fontSize:10,color:C.muted,textTransform:"uppercase",fontWeight:700,marginBottom:3}}>
+                ✨ За 1 {form.outputUnit==="г"?"кг":"л"}
+              </div>
+              <div style={{fontWeight:800,fontSize:22,color:C.purple,textShadow:`0 0 14px ${C.purple}66`}}>{fmt(formCostPerKg)} ₸</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Переопределить выход */}
+        <div style={{background:C.yellowSoft,border:`1px solid ${C.yellow}44`,borderRadius:8,padding:10,marginBottom:14}}>
+          <div style={{fontSize:12,color:C.yellow,fontWeight:700,marginBottom:6}}>
+            ⚙ Переопределить выход (необязательно)
+          </div>
+          <div style={{fontSize:12,color:C.muted,marginBottom:8,lineHeight:1.5}}>
+            По умолчанию выход = сумма ингредиентов ({fmt2(formInputQty)} {form.outputUnit}).
+            Если после термообработки масса другая — укажите вручную:
+          </div>
+          <div style={{display:"flex",gap:10,alignItems:"center"}}>
+            <input type="number" value={form.outputQtyOverride} min="0"
+              onChange={e=>setForm(f=>({...f,outputQtyOverride:e.target.value}))}
+              placeholder={fmt2(formInputQty)}
+              style={{maxWidth:130}}/>
+            <span style={{color:C.muted,fontSize:13}}>{form.outputUnit}</span>
+            {form.outputQtyOverride&&<button onClick={()=>setForm(f=>({...f,outputQtyOverride:""}))}
+              style={{background:"none",color:C.accent,fontSize:12,fontWeight:700}}>× сбросить</button>}
+          </div>
+        </div>
+      </>}
+
+      <div style={{display:"flex",gap:8}}>
+        <Btn onClick={save} style={{flex:1}} disabled={!form.name||(form.composition.length===0&&form.semiLines.length===0)}>
+          {editId?"💾 Сохранить изменения":"✓ Создать полуфабрикат"}
+        </Btn>
+        <Btn variant="outline" onClick={()=>setShowForm(false)}>Отмена</Btn>
+      </div>
+    </Modal>}
+  </div>;
+}
+
+// ════════════════════ ТАБ: ГОТОВЫЕ БЛЮДА ════════════════════
+function DishesTab({state,dispatch}){
+  const {dishes,products,semis}=state;
+  const [catFilter,setCatFilter]=useState("all");
+  const [search,setSearch]=useState("");
+  const [showForm,setShowForm]=useState(false);
+  const [editId,setEditId]=useState(null);
+  const [showPriceEdit,setShowPriceEdit]=useState(null);
+  const [newDishPrice,setNewDishPrice]=useState("");
+
+  const empty={name:"",category:DISH_CATEGORIES[0],price:"",weightOverride:"",productLines:[],semiLines:[],dishLines:[],packLines:[]};
+  const [form,setForm]=useState(empty);
+  const [pRow,setPRow]=useState({productId:"",brutto:"",loss:""});
+  const [sRow,setSRow]=useState({semiId:"",qty:""});
+  const [dRow,setDRow]=useState({dishId:"",qty:""});
+  const [pkRow,setPkRow]=useState({productId:"",qty:""});
+
+  const filtered=dishes.filter(d=>(catFilter==="all"||d.category===catFilter)&&(!search||d.name.toLowerCase().includes(search.toLowerCase())));
+  const grouped=DISH_CATEGORIES.map(cat=>({cat,items:filtered.filter(d=>d.category===cat)})).filter(g=>g.items.length);
+
+  function openAdd(){setForm(empty);setEditId(null);setShowForm(true);}
+  function openEdit(d){setForm({name:d.name,category:d.category,price:String(d.price),
+    weightOverride:d.weightOverride?String(d.weightOverride):"",
+    productLines:d.productLines.map(l=>({...l})),
+    semiLines:d.semiLines.map(l=>({...l})),
+    dishLines:(d.dishLines||[]).map(l=>({...l})),
+    packLines:(d.packLines||[]).map(l=>({...l}))});setEditId(d.id);setShowForm(true);}
+
+  function addPRow(){if(!pRow.productId||!pRow.brutto)return;
+    setForm(f=>({...f,productLines:[...f.productLines,{productId:+pRow.productId,brutto:+pRow.brutto,loss:+pRow.loss||0}]}));
+    setPRow({productId:"",brutto:"",loss:""});}
+  function updatePRow(productId,field,val){setForm(f=>({...f,productLines:f.productLines.map(l=>l.productId===productId?{...l,[field]:+val}:l)}));}
+  function removePRow(productId){setForm(f=>({...f,productLines:f.productLines.filter(l=>l.productId!==productId)}));}
+
+  function addSRow(){if(!sRow.semiId||!sRow.qty)return;
+    setForm(f=>({...f,semiLines:[...f.semiLines,{semiId:+sRow.semiId,qty:+sRow.qty}]}));
+    setSRow({semiId:"",qty:""});}
+  function updateSRow(semiId,val){setForm(f=>({...f,semiLines:f.semiLines.map(l=>l.semiId===semiId?{...l,qty:+val}:l)}));}
+  function removeSRow(semiId){setForm(f=>({...f,semiLines:f.semiLines.filter(l=>l.semiId!==semiId)}));}
+
+  function addDRow(){if(!dRow.dishId||!dRow.qty)return;
+    setForm(f=>({...f,dishLines:[...f.dishLines,{dishId:+dRow.dishId,qty:+dRow.qty}]}));
+    setDRow({dishId:"",qty:""});}
+  function updateDRow(dishId,val){setForm(f=>({...f,dishLines:f.dishLines.map(l=>l.dishId===dishId?{...l,qty:+val}:l)}));}
+  function removeDRow(dishId){setForm(f=>({...f,dishLines:f.dishLines.filter(l=>l.dishId!==dishId)}));}
+
+  function addPkRow(){if(!pkRow.productId||!pkRow.qty)return;
+    setForm(f=>({...f,packLines:[...f.packLines,{productId:+pkRow.productId,qty:+pkRow.qty}]}));
+    setPkRow({productId:"",qty:""});}
+  function updatePkRow(productId,val){setForm(f=>({...f,packLines:f.packLines.map(l=>l.productId===productId?{...l,qty:+val}:l)}));}
+  function removePkRow(productId){setForm(f=>({...f,packLines:f.packLines.filter(l=>l.productId!==productId)}));}
+
+  const formCost=dishCost(form,products,semis,dishes);
+  const formWeight=form.weightOverride?+form.weightOverride:dishWeight(form,dishes);
+
+  function save(){
+    if(!form.name||!form.price)return;
+    const item={...form,id:editId||uid(),price:+form.price,
+      weightOverride:form.weightOverride?+form.weightOverride:null,
+      dishLines:form.dishLines||[],packLines:form.packLines||[]};
+    if(editId)dispatch({type:"UPD_DISH",v:item});
+    else dispatch({type:"ADD_DISH",v:item});
+    setShowForm(false);
+  }
+  function del(id){if(confirm("Удалить блюдо?"))dispatch({type:"DEL_DISH",id});}
+  function quickPrice(){
+    if(!newDishPrice)return;
+    dispatch({type:"SET_DISH_PRICE",id:showPriceEdit,price:+newDishPrice});
+    setShowPriceEdit(null);setNewDishPrice("");
+  }
+
+  return <div>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8,flexWrap:"wrap",gap:8}}>
+      <div>
+        <h2 style={{fontSize:20,fontWeight:700}}>Готовые блюда на продажу</h2>
+        <p style={{color:C.muted,fontSize:13,marginTop:2}}>Состав из продуктов и/или полуфабрикатов</p>
+      </div>
+      <Btn onClick={openAdd}>+ Новое блюдо</Btn>
+    </div>
+
+    <div style={{display:"flex",gap:8,flexWrap:"wrap",margin:"16px 0"}}>
+      <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Поиск блюда…" style={{maxWidth:220}}/>
+      <button onClick={()=>setCatFilter("all")}
+        style={{background:catFilter==="all"?C.accent:C.card,color:catFilter==="all"?"#fff":C.muted,
+          border:`1px solid ${C.border}`,borderRadius:8,padding:"6px 14px",fontSize:13,fontWeight:600}}>Все категории</button>
+      {DISH_CATEGORIES.map(cat=><button key={cat} onClick={()=>setCatFilter(cat)}
+        style={{background:catFilter===cat?C.accent:C.card,color:catFilter===cat?"#fff":C.muted,
+          border:`1px solid ${C.border}`,borderRadius:8,padding:"6px 14px",fontSize:13}}>{cat}</button>)}
+    </div>
+
+    {!grouped.length&&<Card><p style={{color:C.muted,textAlign:"center",padding:24}}>Блюд не найдено</p></Card>}
+
+    {grouped.map(g=><div key={g.cat} style={{marginBottom:24}}>
+      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
+        <h3 style={{fontSize:15,fontWeight:700}}>{g.cat}</h3>
+        <Badge color="gray">{g.items.length}</Badge>
+      </div>
+      <div style={{overflowX:"auto"}}>
+        <table>
+          <thead><tr><th>Блюдо</th><th>Вес</th><th>Себестоимость</th><th>Цена продажи</th><th></th></tr></thead>
+          <tbody>
+            {g.items.map(d=>{
+              const cost=dishCost(d,products,semis,dishes);
+              const weight=d.weightOverride||dishWeight(d,dishes);
+              return <tr key={d.id}>
+                <td style={{fontWeight:600}}>{d.name}</td>
+                <td style={{color:C.muted}}>{fmt2(weight)} г</td>
+                <td><PriceTag value={Math.round(cost)} cost={cost} price={d.price} kind="cost"/></td>
+                <td>
+                  <div style={{display:"flex",alignItems:"flex-start",gap:6}}>
+                    <PriceTag value={d.price} cost={cost} price={d.price} kind="price"/>
+                    <button onClick={()=>{setShowPriceEdit(d.id);setNewDishPrice(String(d.price));}}
+                      style={{background:"none",color:C.muted,fontSize:13,marginTop:2}}>✏</button>
+                  </div>
+                </td>
+                <td>
+                  <div style={{display:"flex",gap:4}}>
+                    <Btn size="sm" variant="outline" onClick={()=>openEdit(d)}>✏</Btn>
+                    <Btn size="sm" variant="danger" onClick={()=>del(d.id)}>✕</Btn>
+                  </div>
+                </td>
+              </tr>;
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>)}
+
+    {showPriceEdit&&<Modal title="Изменить цену продажи" onClose={()=>setShowPriceEdit(null)} width={320}>
+      <Field label="Новая цена (₸)"><input type="number" value={newDishPrice} onChange={e=>setNewDishPrice(e.target.value)} autoFocus/></Field>
+      <div style={{display:"flex",gap:8}}>
+        <Btn onClick={quickPrice} style={{flex:1}}>Сохранить</Btn>
+        <Btn variant="outline" onClick={()=>setShowPriceEdit(null)}>Отмена</Btn>
+      </div>
+    </Modal>}
+
+    {showForm&&<Modal title={editId?"Редактировать блюдо":"Новое блюдо"} onClose={()=>setShowForm(false)} width={720}>
+      <div style={{display:"grid",gridTemplateColumns:"2fr 1fr 1fr 1fr",gap:12,marginBottom:8}}>
+        <Field label="Название"><input value={form.name} onChange={e=>setForm(f=>({...f,name:e.target.value}))} placeholder="Филадельфия"/></Field>
+        <Field label="Категория"><select value={form.category} onChange={e=>setForm(f=>({...f,category:e.target.value}))}>
+          {DISH_CATEGORIES.map(c=><option key={c}>{c}</option>)}</select></Field>
+        <Field label="Цена продажи (₸)"><input type="number" value={form.price} onChange={e=>setForm(f=>({...f,price:e.target.value}))}/></Field>
+        <Field label="Вес override (г)" hint="пусто = авторасчёт"><input type="number" value={form.weightOverride} onChange={e=>setForm(f=>({...f,weightOverride:e.target.value}))} placeholder={fmt2(dishWeight(form))}/></Field>
+      </div>
+
+      {!isSetCat(form.category)&&<>
+        <div style={{fontWeight:700,fontSize:13,marginBottom:8,paddingTop:8,borderTop:`1px solid ${C.border}`,
+          display:"flex",alignItems:"center",gap:8}}>🥦 <span>Из продуктов</span>
+          {form.productLines.length>0&&<Badge color="gray">{form.productLines.length}</Badge>}
+        </div>
+        {form.productLines.length>0&&<div style={{marginBottom:10}}>
+          {form.productLines.map(r=>{
+            const p=products.find(p=>p.id===r.productId);if(!p)return null;
+            const n=netto(r.brutto,r.loss);
+            return <div key={r.productId} style={{background:C.card,borderRadius:10,padding:"10px 12px",
+              marginBottom:6,border:`1px solid ${C.border}`}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+                <span style={{fontWeight:600,fontSize:13,flex:1,marginRight:8}}>{p.name}</span>
+                <button onClick={()=>removePRow(r.productId)} style={{background:C.accentSoft,color:C.accent,
+                  border:`1px solid ${C.accent}55`,borderRadius:8,padding:"4px 10px",
+                  fontSize:12,fontWeight:700,cursor:"pointer",flexShrink:0,whiteSpace:"nowrap"}}>× Удалить</button>
+              </div>
+              <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
+                <div style={{display:"flex",alignItems:"center",gap:4}}>
+                  <span style={{fontSize:11,color:C.muted}}>Брутто</span>
+                  <input type="number" value={r.brutto} min="0"
+                    onChange={e=>updatePRow(r.productId,"brutto",e.target.value)}
+                    style={{width:72,padding:"5px 8px",fontSize:13,borderRadius:8,
+                      background:C.surface,border:`1px solid ${C.border}`,color:C.text}}/>
+                  <span style={{fontSize:12,color:C.muted}}>г</span>
+                </div>
+                <div style={{display:"flex",alignItems:"center",gap:4}}>
+                  <span style={{fontSize:11,color:C.muted}}>Потери %</span>
+                  <input type="number" value={r.loss} min="0" max="100"
+                    onChange={e=>updatePRow(r.productId,"loss",e.target.value)}
+                    style={{width:58,padding:"5px 8px",fontSize:13,borderRadius:8,
+                      background:C.surface,border:`1px solid ${C.border}`,color:C.text}}/>
+                </div>
+                <div style={{marginLeft:"auto",display:"flex",gap:12}}>
+                  <span style={{fontSize:12,color:C.green,fontWeight:700}}>→ {fmt2(n)} г</span>
+                  <span style={{fontSize:12,color:C.blue,fontWeight:700}}>{fmt(productUnitCost(p)*n)} ₸</span>
+                </div>
+              </div>
+            </div>;
+          })}
+        </div>}
+        <div style={{background:C.card,borderRadius:10,padding:12,marginBottom:14}}>
+          <div style={{fontSize:12,color:C.muted,fontWeight:700,textTransform:"uppercase",marginBottom:8}}>Добавить продукт</div>
+          <Field label="Продукт"><select value={pRow.productId} onChange={e=>setPRow(r=>({...r,productId:e.target.value}))}>
+            <option value="">— выберите —</option>
+            {products.filter(p=>p.category!=="Упаковка"&&!form.productLines.find(l=>l.productId===p.id)).map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
+          </select></Field>
+          <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"flex-end"}}>
+            <Field label="Брутто,г" style={{flex:1,minWidth:100}}><input type="number" value={pRow.brutto} onChange={e=>setPRow(r=>({...r,brutto:e.target.value}))}/></Field>
+            <Field label="% потерь" style={{flex:1,minWidth:80}}><input type="number" value={pRow.loss} onChange={e=>setPRow(r=>({...r,loss:e.target.value}))}/></Field>
+            <div style={{paddingBottom:14}}><Btn onClick={addPRow} disabled={!pRow.productId||!pRow.brutto}>+ Добавить</Btn></div>
+          </div>
+        </div>
+
+        <div style={{fontWeight:700,fontSize:13,marginBottom:8,paddingTop:4,borderTop:`1px solid ${C.border}`,
+          display:"flex",alignItems:"center",gap:8}}>🥣 <span>Из полуфабрикатов</span>
+          {form.semiLines.length>0&&<Badge color="purple">{form.semiLines.length}</Badge>}
+        </div>
+        {form.semiLines.length>0&&<div style={{marginBottom:10}}>
+          {form.semiLines.map(r=>{
+            const s=semis.find(s=>s.id===r.semiId);if(!s)return null;
+            return <div key={r.semiId} style={{background:C.purpleSoft,borderRadius:10,padding:"10px 12px",
+              marginBottom:6,border:`1px solid ${C.purple}44`}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+                <span style={{fontWeight:600,fontSize:13,flex:1,marginRight:8,color:C.purple}}>{s.name}</span>
+                <button onClick={()=>removeSRow(r.semiId)} style={{background:C.accentSoft,color:C.accent,
+                  border:`1px solid ${C.accent}55`,borderRadius:8,padding:"4px 10px",
+                  fontSize:12,fontWeight:700,cursor:"pointer",flexShrink:0,whiteSpace:"nowrap"}}>× Удалить</button>
+              </div>
+              <div style={{display:"flex",alignItems:"center",gap:8}}>
+                <input type="number" value={r.qty} min="0"
+                  onChange={e=>updateSRow(r.semiId,e.target.value)}
+                  style={{width:90,padding:"5px 10px",fontSize:13,borderRadius:8,
+                    background:C.surface,border:`1px solid ${C.purple}55`,color:C.text}}/>
+                <span style={{color:C.muted,fontSize:12}}>{s.outputUnit}</span>
+                <span style={{marginLeft:"auto",color:C.blue,fontWeight:700,fontSize:13}}>{fmt(semiCostPerUnit(s,products,semis)*r.qty)} ₸</span>
+              </div>
+            </div>;
+          })}
+        </div>}
+        <div style={{background:C.card,borderRadius:10,padding:12,marginBottom:14}}>
+          <div style={{fontSize:12,color:C.purple,fontWeight:700,textTransform:"uppercase",marginBottom:8}}>Добавить полуфабрикат</div>
+          <Field label="Полуфабрикат"><select value={sRow.semiId} onChange={e=>setSRow(r=>({...r,semiId:e.target.value}))}>
+            <option value="">— выберите —</option>
+            {semis.filter(s=>!form.semiLines.find(l=>l.semiId===s.id)).map(s=><option key={s.id} value={s.id}>{s.name}</option>)}
+          </select></Field>
+          <div style={{display:"flex",gap:8,alignItems:"flex-end"}}>
+            <Field label="Кол-во" style={{flex:1}}><input type="number" value={sRow.qty} onChange={e=>setSRow(r=>({...r,qty:e.target.value}))} placeholder="130"/></Field>
+            <div style={{paddingBottom:14}}><Btn onClick={addSRow} disabled={!sRow.semiId||!sRow.qty} variant="purple">+ Добавить</Btn></div>
+          </div>
+        </div>
+      </>}
+
+      {isSetCat(form.category)&&<>
+        <div style={{fontWeight:700,marginBottom:10,paddingTop:4,borderTop:`1px solid ${C.border}`,display:"flex",alignItems:"center",gap:8}}>
+          <span>📦 Состав сета (готовые блюда)</span><Badge color="yellow">{form.category}</Badge>
+        </div>
+        <div style={{background:C.yellowSoft,border:`1px solid ${C.yellow}44`,borderRadius:8,padding:"8px 12px",fontSize:12,color:C.yellow,marginBottom:10}}>
+          ⚡ Упаковка вложенных роллов вычитается автоматически — в сете считается только упаковка сета
+        </div>
+        {form.dishLines.length>0&&<table style={{marginBottom:10}}>
+          <thead><tr><th>Блюдо</th><th>Кол-во</th><th>Себест. без упак.</th><th>−Упаковка</th><th>Итого</th><th></th></tr></thead>
+          <tbody>
+            {form.dishLines.map(r=>{
+              const d=dishes.find(d=>d.id===r.dishId);if(!d)return null;
+              const fullCost=dishCost(d,products,semis,dishes)*r.qty;
+              const packCost=dishPackagingCost(d,products)*r.qty;
+              const netCost=fullCost-packCost;
+              return <tr key={r.dishId}>
+                <td style={{fontWeight:600}}>{d.name} <span style={{color:C.muted,fontSize:11}}>({d.category})</span></td>
+                <td><input type="number" value={r.qty} onChange={e=>updateDRow(r.dishId,e.target.value)} style={{width:55,padding:"4px 8px",fontSize:13}} min="1"/></td>
+                <td style={{color:C.blue,fontWeight:600}}>{fmt(fullCost)} ₸</td>
+                <td style={{color:C.accent,fontSize:12}}>−{fmt(packCost)} ₸</td>
+                <td style={{fontWeight:700,color:C.green}}>{fmt(netCost)} ₸</td>
+                <td><button onClick={()=>removeDRow(r.dishId)} style={{background:"none",color:C.muted,fontSize:18}}>×</button></td>
+              </tr>;
+            })}
+          </tbody>
+        </table>}
+        <div style={{background:C.card,borderRadius:10,padding:10,marginBottom:14}}>
+          <div style={{display:"grid",gridTemplateColumns:"2fr 1fr auto",gap:8,alignItems:"end"}}>
+            <Field label="Блюдо">
+              <select value={dRow.dishId} onChange={e=>setDRow(r=>({...r,dishId:e.target.value}))}>
+                <option value="">— выберите блюдо —</option>
+                {dishes.filter(d=>d.id!==editId&&!isSetCat(d.category)&&!form.dishLines.find(l=>l.dishId===d.id))
+                  .map(d=><option key={d.id} value={d.id}>{d.name} ({d.category})</option>)}
+              </select>
+            </Field>
+            <Field label="Порций"><input type="number" value={dRow.qty} onChange={e=>setDRow(r=>({...r,qty:e.target.value}))} placeholder="1" min="1"/></Field>
+            <div style={{paddingBottom:14}}><Btn size="sm" onClick={addDRow}>+</Btn></div>
+          </div>
+        </div>
+
+        <div style={{fontWeight:700,marginBottom:10,paddingTop:4,borderTop:`1px solid ${C.border}`,display:"flex",alignItems:"center",gap:8}}>
+          <span>🎁 Упаковка сета</span><Badge color="purple">из справочника Упаковка</Badge>
+        </div>
+        {form.packLines.length>0&&<table style={{marginBottom:10}}>
+          <thead><tr><th>Упаковка</th><th>Кол-во, шт</th><th>Стоимость</th><th></th></tr></thead>
+          <tbody>
+            {form.packLines.map(r=>{
+              const p=products.find(p=>p.id===r.productId);if(!p)return null;
+              return <tr key={r.productId}>
+                <td style={{fontWeight:600}}>{p.name}</td>
+                <td><input type="number" value={r.qty} onChange={e=>updatePkRow(r.productId,e.target.value)} style={{width:60,padding:"4px 8px",fontSize:13}} min="1"/></td>
+                <td style={{fontWeight:700,color:C.purple}}>{fmt(productUnitCost(p)*r.qty)} ₸</td>
+                <td><button onClick={()=>removePkRow(r.productId)} style={{background:"none",color:C.muted,fontSize:18}}>×</button></td>
+              </tr>;
+            })}
+          </tbody>
+        </table>}
+        <div style={{background:C.card,borderRadius:10,padding:10,marginBottom:14}}>
+          <div style={{display:"grid",gridTemplateColumns:"2fr 1fr auto",gap:8,alignItems:"end"}}>
+            <Field label="Выберите упаковку">
+              <select value={pkRow.productId} onChange={e=>setPkRow(r=>({...r,productId:e.target.value}))}>
+                <option value="">— из категории Упаковка —</option>
+                {products.filter(p=>p.category==="Упаковка"&&!form.packLines.find(l=>l.productId===p.id))
+                  .map(p=><option key={p.id} value={p.id}>{p.name} — {fmt(productUnitCost(p))} ₸/шт</option>)}
+              </select>
+            </Field>
+            <Field label="Кол-во, шт"><input type="number" value={pkRow.qty} onChange={e=>setPkRow(r=>({...r,qty:e.target.value}))} placeholder="1" min="1"/></Field>
+            <div style={{paddingBottom:14}}><Btn size="sm" onClick={addPkRow}>+</Btn></div>
+          </div>
+        </div>
+      </>}
+
+      {!isSetCat(form.category)&&<>
+        <div style={{fontWeight:700,marginBottom:10,paddingTop:4,borderTop:`1px solid ${C.border}`,display:"flex",alignItems:"center",gap:8}}>
+          <span>🎁 Упаковка</span><Badge color="gray">включается в себестоимость</Badge>
+        </div>
+        {form.packLines.length>0&&<table style={{marginBottom:10}}>
+          <thead><tr><th>Упаковка</th><th>Кол-во, шт</th><th>Стоимость</th><th></th></tr></thead>
+          <tbody>
+            {form.packLines.map(r=>{
+              const p=products.find(p=>p.id===r.productId);if(!p)return null;
+              return <tr key={r.productId}>
+                <td style={{fontWeight:600}}>{p.name}</td>
+                <td><input type="number" value={r.qty} onChange={e=>updatePkRow(r.productId,e.target.value)} style={{width:60,padding:"4px 8px",fontSize:13}} min="1"/></td>
+                <td style={{fontWeight:700,color:C.purple}}>{fmt(productUnitCost(p)*r.qty)} ₸</td>
+                <td><button onClick={()=>removePkRow(r.productId)} style={{background:"none",color:C.muted,fontSize:18}}>×</button></td>
+              </tr>;
+            })}
+          </tbody>
+        </table>}
+        <div style={{background:C.card,borderRadius:10,padding:10,marginBottom:14}}>
+          <div style={{display:"grid",gridTemplateColumns:"2fr 1fr auto",gap:8,alignItems:"end"}}>
+            <Field label="Выберите упаковку">
+              <select value={pkRow.productId} onChange={e=>setPkRow(r=>({...r,productId:e.target.value}))}>
+                <option value="">— из категории Упаковка —</option>
+                {products.filter(p=>p.category==="Упаковка"&&!form.packLines.find(l=>l.productId===p.id))
+                  .map(p=><option key={p.id} value={p.id}>{p.name} — {fmt(productUnitCost(p))} ₸/шт</option>)}
+              </select>
+            </Field>
+            <Field label="Кол-во, шт"><input type="number" value={pkRow.qty} onChange={e=>setPkRow(r=>({...r,qty:e.target.value}))} placeholder="1" min="1"/></Field>
+            <div style={{paddingBottom:14}}><Btn size="sm" onClick={addPkRow}>+</Btn></div>
+          </div>
+        </div>
+      </>}
+
+      <div style={{background:`linear-gradient(135deg, ${C.purpleSoft}, ${C.blueSoft})`,border:`1px solid ${C.purple}66`,borderRadius:10,padding:14,marginBottom:14}}>
+        <div style={{display:"flex",gap:28,flexWrap:"wrap",alignItems:"flex-start"}}>
+          <div><div style={{fontSize:11,color:C.muted,textTransform:"uppercase",fontWeight:700}}>Вес</div><div style={{fontWeight:800,fontSize:18}}>{fmt2(formWeight)} г</div></div>
+          <div><div style={{fontSize:11,color:C.muted,textTransform:"uppercase",fontWeight:700}}>Себестоимость</div>
+            <div style={{fontWeight:800,fontSize:18,color:C.blue,textShadow:`0 0 12px ${C.blue}55`}}>{fmt(formCost)} ₸</div></div>
+          {form.price&&<div><div style={{fontSize:11,color:C.muted,textTransform:"uppercase",fontWeight:700}}>Цена / проценты</div>
+            <PriceTag value={+form.price} cost={formCost} price={+form.price} kind="price" size="lg"/></div>}
+        </div>
+      </div>
+
+      <div style={{display:"flex",gap:8}}>
+        <Btn onClick={save} style={{flex:1}}>{editId?"Сохранить":"Создать блюдо"}</Btn>
+        <Btn variant="outline" onClick={()=>setShowForm(false)}>Отмена</Btn>
+      </div>
+    </Modal>}
+  </div>;
+}
+
+// ════════════════════ SUPABASE СИНХРОНИЗАЦИЯ ════════════════════
+const SB_URL = "https://eiodeeugxtbbcpclxtyc.supabase.co";
+const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVpb2RlZXVneHRiYmNwY2x4dHljIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI0MDY5ODcsImV4cCI6MjA5Nzk4Mjk4N30.h2y3Kj5WNKz8sa0W2RD1O1uO1mN7PWVegoFUPGNkcvg";
+const SB_STORE_ID = "main"; // ID записи в таблице
+
+const sbHeaders = {
+  "Content-Type": "application/json",
+  "apikey": SB_KEY,
+  "Authorization": "Bearer " + SB_KEY,
+  "Prefer": "return=representation"
+};
+
+async function sbInit(){
+  // Создаём таблицу если не существует через SQL (rpc)
+  try{
+    await fetch(`${SB_URL}/rest/v1/ttk_data?id=eq.${SB_STORE_ID}`, {
+      headers: {...sbHeaders, "Prefer": "return=minimal"}
+    });
+  }catch{}
+}
+
+async function sbLoad(){
+  try{
+    const r = await fetch(`${SB_URL}/rest/v1/ttk_data?id=eq.${SB_STORE_ID}`, {
+      headers: sbHeaders
+    });
+    if(!r.ok) return null;
+    const rows = await r.json();
+    if(!rows || !rows.length) return null;
+    return rows[0].payload;
+  }catch{ return null; }
+}
+
+async function sbSave(data){
+  // Upsert — создаёт или обновляет запись
+  const r = await fetch(`${SB_URL}/rest/v1/ttk_data`, {
+    method: "POST",
+    headers: {...sbHeaders, "Prefer": "resolution=merge-duplicates,return=minimal"},
+    body: JSON.stringify({id: SB_STORE_ID, payload: data, updated_at: new Date().toISOString()})
+  });
+  if(!r.ok){
+    const e = await r.text();
+    // Если таблица не существует — нужно создать
+    if(e.includes("does not exist") || e.includes("42P01")){
+      throw new Error("TABLE_NOT_FOUND");
+    }
+    throw new Error(e);
+  }
+}
+
+async function sbCreateTable(){
+  // Создаём таблицу через SQL API
+  const sql = `
+    CREATE TABLE IF NOT EXISTS ttk_data (
+      id TEXT PRIMARY KEY,
+      payload JSONB NOT NULL,
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    );
+  `;
+  const r = await fetch(`${SB_URL}/rest/v1/rpc/exec_sql`, {
+    method: "POST",
+    headers: sbHeaders,
+    body: JSON.stringify({sql})
+  });
+  return r.ok;
+}
+
+// ════════════════════ ROOT APP ════════════════════
+function App(){
+  const [state, setState]      = useState({products:[],semis:[],dishes:[]});
+  const [appReady, setReady]   = useState(false);
+  const [tab, setTab]          = useState("products");
+  const [sync, setSync]        = useState("loading");
+  const [syncTime, setSyncTime]= useState(null);
+  const [sbError, setSbError]  = useState(""); // ошибка Supabase
+  const [showSetup, setShowSetup] = useState(false); // модал настройки таблицы
+
+  const saveTimer    = useRef(null);
+  const isFirstState = useRef(true);
+  const skipSave     = useRef(false);
+  const lastSbTs     = useRef(0);
+
+  // ── Загрузка при старте ──
+  useEffect(()=>{
+    (async()=>{
+      setSync("loading");
+      // Сначала грузим из localStorage (мгновенно)
+      const localData = {
+        products: LS.get("products", SEED_PRODUCTS),
+        semis:    LS.get("semis",    SEED_SEMIS),
+        dishes:   LS.get("dishes",   SEED_DISHES)
+      };
+      setState(localData);
+
+      // Затем пробуем загрузить из Supabase
+      try{
+        const sbData = await sbLoad();
+        if(sbData && sbData.ts > (LS.get("ttk_ts",0)||0)){
+          lastSbTs.current = sbData.ts;
+          skipSave.current = true;
+          isFirstState.current = true;
+          setState({
+            products: sbData.products || localData.products,
+            semis:    sbData.semis    || localData.semis,
+            dishes:   sbData.dishes   || localData.dishes
+          });
+          LS.set("ttk_ts", sbData.ts);
+          setSync("synced");
+          setTimeout(()=>setSync("idle"),3000);
+        } else {
+          setSync("idle");
+        }
+      }catch(e){
+        if(e.message==="TABLE_NOT_FOUND"){
+          setSbError("table");
+          setShowSetup(true);
+        } else {
+          setSbError(e.message||"Ошибка подключения");
+        }
+        setSync("error");
+      }
+      setReady(true);
+    })();
+  },[]);
+
+  // ── Автосохранение ──
+  useEffect(()=>{
+    if(!appReady) return;
+    if(isFirstState.current){ isFirstState.current=false; return; }
+    if(skipSave.current){ skipSave.current=false; return; }
+
+    LS.set("products",state.products);
+    LS.set("semis",   state.semis);
+    LS.set("dishes",  state.dishes);
+
+    setSync("saving");
+    clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(async()=>{
+      const ts = Date.now();
+      try{
+        await sbSave({ts, products:state.products, semis:state.semis, dishes:state.dishes});
+        lastSbTs.current = ts;
+        LS.set("ttk_ts", ts);
+        setSyncTime(ts);
+        setSync("saved");
+        setSbError("");
+        setTimeout(()=>setSync(s=>s==="saved"?"idle":s), 2500);
+      }catch(e){
+        if(e.message==="TABLE_NOT_FOUND"){
+          setSbError("table");
+          setShowSetup(true);
+        } else {
+          setSbError(e.message||"Ошибка сохранения");
+        }
+        setSync("error");
+      }
+    }, 800);
+  },[state, appReady]);
+
+  // ── Автополинг каждые 8 сек ──
+  useEffect(()=>{
+    if(!appReady) return;
+    const poll = setInterval(async()=>{
+      try{
+        const sbData = await sbLoad();
+        if(sbData && sbData.ts && sbData.ts > lastSbTs.current + 500){
+          lastSbTs.current = sbData.ts;
+          skipSave.current = true;
+          isFirstState.current = true;
+          setState({
+            products: sbData.products||[],
+            semis:    sbData.semis||[],
+            dishes:   sbData.dishes||[]
+          });
+          setSyncTime(sbData.ts);
+          setSync("synced");
+          setTimeout(()=>setSync("idle"),3000);
+        }
+      }catch{}
+    }, 8000);
+    return ()=>clearInterval(poll);
+  },[appReady]);
+
+  // ── Dispatch ──
+  const dispatch = useCallback(a=> setState(s=> reducer(s,a)),[]);
+
+  // ── Ручная синхронизация ──
+  async function manualSync(){
+    setSync("saving");
+    try{
+      const ts = Date.now();
+      await sbSave({ts, products:state.products, semis:state.semis, dishes:state.dishes});
+      lastSbTs.current = ts;
+      LS.set("ttk_ts", ts);
+      setSyncTime(ts); setSync("saved"); setSbError("");
+      setTimeout(()=>setSync(s=>s==="saved"?"idle":s), 2500);
+    }catch(e){ setSbError(e.message||"Ошибка"); setSync("error"); }
+  }
+
+  // ── ПЕРЕНОС ДАННЫХ ЧЕРЕЗ ТЕКСТ ──
+  const [showSyncModal, setShowSyncModal] = useState(false);
+  const [syncTab,    setSyncTab]    = useState("export");
+  const [syncText,   setSyncText]   = useState("");
+  const [syncOp,     setSyncOp]     = useState("");
+  const [syncMsg,    setSyncMsg]    = useState("");
+  const pasteRef = useRef(null);
+
+  function encodeData(){
+    // Экспортируем только последнюю цену каждого продукта (без всей истории)
+    const products = state.products.map(({id,name,unit,priceFor,category,priceHistory})=>({
+      id,name,unit,priceFor,category,
+      priceHistory: priceHistory?.length ? [priceHistory[priceHistory.length-1]] : []
+    }));
+    const semis = state.semis.map(({id,name,outputUnit,outputQtyOverride,composition,semiLines})=>({
+      id,name,outputUnit,
+      ...(outputQtyOverride?{outputQtyOverride}:{}),
+      composition:composition||[],
+      semiLines:semiLines||[]
+    }));
+    const dishes = state.dishes.map(({id,name,category,price,weightOverride,productLines,semiLines,dishLines,packLines})=>({
+      id,name,category,price,
+      ...(weightOverride?{weightOverride}:{}),
+      productLines:productLines||[],
+      semiLines:semiLines||[],
+      dishLines:dishLines||[],
+      packLines:packLines||[]
+    }));
+    const data={v:1,ts:Date.now(),products,semis,dishes};
+    try{ return "TTK1:" + btoa(unescape(encodeURIComponent(JSON.stringify(data)))); }
+    catch{ return "TTK1:" + btoa(JSON.stringify(data)); }
+  }
+  function openExport(){ setSyncTab("export"); setSyncOp(""); setSyncMsg(""); setSyncText(encodeData()); setShowSyncModal(true); }
+  function openImport(){ setSyncTab("import"); setSyncOp(""); setSyncMsg(""); setSyncText(""); setShowSyncModal(true); }
+
+  async function shareData(){
+    const text = syncText || encodeData();
+    // На мобильном — открываем системный диалог (Заметки, Telegram и т.д.)
+    if(navigator.share){
+      try{
+        await navigator.share({ title:"ТТК данные", text });
+        setSyncOp("copied"); setSyncMsg("Готово! Вставьте текст в Заметки и данные появятся на всех устройствах iCloud.");
+      }catch(e){ if(e.name!=="AbortError") copyToClipboard(); }
+    } else {
+      copyToClipboard();
+    }
+  }
+
+  async function copyToClipboard(){
+    try{
+      await navigator.clipboard.writeText(syncText);
+      setSyncOp("copied"); setSyncMsg("Скопировано! Отправьте себе в Telegram → Избранное. На телефоне: 📥 Получить → вставьте текст.");
+    }catch{
+      pasteRef.current?.select();
+      setSyncOp("copied"); setSyncMsg("Выделите текст выше и скопируйте вручную (Ctrl+A, Ctrl+C)");
+    }
+  }
+
+  function loadFromText(){
+    const raw = syncText.trim();
+    if(!raw){ setSyncOp("error"); setSyncMsg("Вставьте текст с другого устройства"); return; }
+    try{
+      const encoded = raw.startsWith("TTK1:") ? raw.slice(5) : raw;
+      let json;
+      try{ json = decodeURIComponent(escape(atob(encoded))); }catch{ json = atob(encoded); }
+      const data = JSON.parse(json);
+      const products = data.p || data.products;
+      const semis    = data.s || data.semis   || [];
+      const dishes   = data.d || data.dishes  || [];
+      if(!Array.isArray(products)){ setSyncOp("error"); setSyncMsg("Неверный формат — это не данные ТТК"); return; }
+      isFirstState.current = true;
+      dispatch({type:"LOAD_ALL", d:{products, semis, dishes}});
+      LS.set("products",products); LS.set("semis",semis); LS.set("dishes",dishes);
+      setSyncOp("loaded");
+      setSyncMsg(`✓ Загружено! Продуктов: ${products.length}, полуфабр.: ${semis.length}, блюд: ${dishes.length}`);
+    }catch(e){ setSyncOp("error"); setSyncMsg("Ошибка: убедитесь что скопировали текст полностью"); }
+  }
+
+  // ── Резервная копия JSON ──
+  const importRef = useRef(null);
+  const [showBackup, setShowBackup] = useState(false);
+  const [backupData, setBackupData] = useState(null);
+  const [backupErr,  setBackupErr]  = useState("");
+
+  function exportJSON(){
+    const data={version:1,exported:new Date().toISOString(),products:state.products,semis:state.semis,dishes:state.dishes};
+    const blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement("a");
+    a.href=url; a.download=`ttk-${new Date().toLocaleDateString("ru").replace(/\./g,"-")}.json`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+  }
+  function handleImportFile(e){
+    const file=e.target.files[0]; if(!file) return;
+    const reader=new FileReader();
+    reader.onload=(ev)=>{
+      try{
+        const d=JSON.parse(ev.target.result);
+        if(!Array.isArray(d.products)){ setBackupErr("Неверный формат."); setBackupData(null); }
+        else{ setBackupData(d); setBackupErr(""); }
+      }catch{ setBackupErr("Ошибка чтения."); setBackupData(null); }
+      setShowBackup(true);
+    };
+    reader.readAsText(file); e.target.value="";
+  }
+  function confirmBackup(){
+    if(!backupData) return;
+    isFirstState.current=true;
+    dispatch({type:"LOAD_ALL",d:backupData});
+    LS.set("products",backupData.products); LS.set("semis",backupData.semis||[]); LS.set("dishes",backupData.dishes||[]);
+    setShowBackup(false); setBackupData(null);
+  }
+
+  const TABS=[
+    {id:"products",label:"🥦 Продукты и цены"},
+    {id:"semis",   label:"🥣 Соуса и полуфабрикаты"},
+    {id:"dishes",  label:"🍱 Готовые блюда"},
+  ];
+
+  if(!appReady) return <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:16}}>
+    <div style={{fontSize:32}}>⟳</div><div style={{color:C.muted,fontSize:15}}>Загружаем данные…</div>
+  </div>;
+
+  return <div style={{minHeight:"100vh"}}>
+    {/* ══ ШАПКА ══ */}
+    <div style={{background:`linear-gradient(90deg,${C.surface},#1a0f2e)`,borderBottom:`1px solid ${C.border}`,
+      padding:"0 12px",height:56,display:"flex",alignItems:"center",justifyContent:"space-between",
+      position:"sticky",top:0,zIndex:50,boxShadow:"0 2px 20px rgba(0,0,0,.4)",gap:8}}>
+      <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:1,minWidth:0}}>
+        <span style={{fontSize:20}}>📄</span>
+        <span style={{fontWeight:800,fontSize:15,background:`linear-gradient(90deg,${C.blue},${C.purple},${C.accent})`,
+          WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",whiteSpace:"nowrap"}}>ТТК — Суши-бар</span>
+      </div>
+      <div style={{display:"flex",gap:6,alignItems:"center",flexShrink:0}}>
+        <button onClick={openExport} style={{background:C.tealSoft,border:`1px solid ${C.teal}55`,borderRadius:10,
+          padding:"6px 12px",fontSize:12,color:C.teal,fontWeight:700,whiteSpace:"nowrap"}}>📤 Отправить</button>
+        <button onClick={openImport} style={{background:C.purpleSoft,border:`1px solid ${C.purple}55`,borderRadius:10,
+          padding:"6px 12px",fontSize:12,color:C.purple,fontWeight:700,whiteSpace:"nowrap"}}>📥 Получить</button>
+        <button onClick={exportJSON} title="JSON резервная копия" style={{background:C.card,border:`1px solid ${C.border}`,
+          borderRadius:10,padding:"6px 8px",fontSize:13,color:C.muted,fontWeight:700}}>💾</button>
+
+        {/* Кнопка ручной синхронизации */}
+        <button onClick={manualSync} title="Синхронизировать сейчас"
+          style={{background:C.tealSoft,border:`1px solid ${C.teal}55`,borderRadius:10,
+            padding:"5px 10px",fontSize:12,color:C.teal,fontWeight:700}}>🔄</button>
+
+        {/* Статус Supabase */}
+        <div style={{display:"flex",alignItems:"center",gap:5,
+          background:C.card,border:`1px solid ${
+            sync==="saved"||sync==="synced"?C.green+"66":sync==="saving"?C.yellow+"66":sync==="error"?C.accent+"66":C.border}`,
+          borderRadius:20,padding:"5px 10px",transition:"border-color .3s",cursor:sync==="error"?"pointer":"default"}}
+          onClick={sync==="error"?()=>setShowSetup(true):undefined}
+          title={sbError||"Supabase"}>
+          <span style={{fontSize:12,
+            color:sync==="saved"||sync==="synced"?C.green:sync==="saving"?C.yellow:sync==="error"?C.accent:C.muted,
+            ...(sync==="saving"||sync==="loading"?{animation:"spin .9s linear infinite",display:"inline-block"}:{})
+          }}>
+            {sync==="saved"?"✓":sync==="synced"?"⟳":sync==="saving"?"⏳":sync==="error"?"⚠":"☁"}
+          </span>
+          <span style={{fontSize:11,fontWeight:600,whiteSpace:"nowrap",
+            color:sync==="saved"||sync==="synced"?C.green:sync==="saving"?C.yellow:sync==="error"?C.accent:C.muted}}>
+            {sync==="saved"?"Сохранено":sync==="synced"?"Обновлено":sync==="saving"?"Сохраняю…":sync==="error"?"Ошибка":"Supabase"}
+          </span>
+        </div>
+        <input ref={importRef} type="file" accept=".json" onChange={handleImportFile} style={{display:"none"}}/>
+      </div>
+    </div>
+
+    {/* ══ МОДАЛ: Настройка таблицы Supabase ══ */}
+    {showSetup&&<Modal title="⚙️ Настройка Supabase" onClose={()=>setShowSetup(false)} width={500}>
+      <div style={{background:C.yellowSoft,border:`1px solid ${C.yellow}44`,borderRadius:10,
+        padding:"12px 14px",fontSize:13,color:C.yellow,marginBottom:16,lineHeight:1.7}}>
+        <b>Нужно создать таблицу в Supabase!</b><br/>
+        Откройте Supabase → ваш проект → <b>SQL Editor</b> → вставьте SQL ниже → нажмите <b>Run</b>
+      </div>
+      <div style={{background:"#0a0a14",borderRadius:10,padding:14,marginBottom:14,
+        border:`1px solid ${C.border}`,fontFamily:"monospace",fontSize:12,color:C.teal,lineHeight:1.8,
+        userSelect:"all",cursor:"text"}}>
+        {`CREATE TABLE IF NOT EXISTS ttk_data (\n  id TEXT PRIMARY KEY,\n  payload JSONB NOT NULL,\n  updated_at TIMESTAMPTZ DEFAULT NOW()\n);\n\nALTER TABLE ttk_data ENABLE ROW LEVEL SECURITY;\n\nCREATE POLICY "allow_all" ON ttk_data\n  FOR ALL USING (true) WITH CHECK (true);`}
+      </div>
+      <div style={{background:C.tealSoft,border:`1px solid ${C.teal}44`,borderRadius:8,
+        padding:"8px 12px",fontSize:12,color:C.teal,marginBottom:14}}>
+        💡 После выполнения SQL нажмите 🔄 в шапке для синхронизации
+      </div>
+      <div style={{display:"flex",gap:8}}>
+        <Btn onClick={async()=>{
+          setShowSetup(false);
+          await manualSync();
+        }} variant="teal" style={{flex:1}}>✓ Таблица создана, синхронизировать</Btn>
+        <Btn variant="outline" onClick={()=>setShowSetup(false)}>Закрыть</Btn>
+      </div>
+    </Modal>}
+
+    {/* ══ МОДАЛ: Перенос данных через Заметки ══ */}
+    {showSyncModal&&<Modal title={syncTab==="export"?"📤 Отправить на другое устройство":"📥 Получить с другого устройства"}
+      onClose={()=>setShowSyncModal(false)} width={440}>
+
+      {syncMsg&&<div style={{borderRadius:10,padding:"10px 14px",marginBottom:14,fontSize:13,
+        background:syncOp==="loaded"||syncOp==="copied"?C.greenSoft:C.accentSoft,
+        border:`1px solid ${syncOp==="loaded"||syncOp==="copied"?C.green:C.accent}44`,
+        color:syncOp==="loaded"||syncOp==="copied"?C.green:C.accent}}>{syncMsg}</div>}
+
+      {syncTab==="export"&&<>
+        <div style={{background:C.tealSoft,border:`1px solid ${C.teal}33`,borderRadius:12,
+          padding:"12px 14px",marginBottom:16,lineHeight:1.9}}>
+          <div style={{fontWeight:700,color:C.teal,marginBottom:6,fontSize:13}}>📱 На телефоне (iOS):</div>
+          <div style={{fontSize:12,color:C.teal}}>
+            1. Нажмите <b>Поделиться</b> → выберите <b>Заметки</b><br/>
+            2. Заметка появится на телефоне через iCloud автоматически<br/>
+            3. На телефоне: скопируйте заметку → <b>📥 Получить</b>
+          </div>
+          <div style={{marginTop:10,paddingTop:10,borderTop:`1px solid ${C.teal}33`,fontWeight:700,color:C.teal,fontSize:13}}>💻 На ноутбуке (Mac/Windows):</div>
+          <div style={{fontSize:12,color:C.teal}}>
+            1. Нажмите <b>Скопировать</b><br/>
+            2. Вставьте в Заметки / Telegram Избранное<br/>
+            3. На телефоне: скопируйте → <b>📥 Получить</b>
+          </div>
+        </div>
+
+        <div style={{fontSize:12,color:C.muted,marginBottom:10,textAlign:"center"}}>
+          {state.products.length} продуктов · {state.semis.length} полуфабрикатов · {state.dishes.length} блюд
+        </div>
+
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:12}}>
+          <Btn onClick={shareData} variant="teal" style={{fontSize:14,padding:"12px 8px"}}>
+            📤 Поделиться
+          </Btn>
+          <Btn onClick={copyToClipboard} variant="outline" style={{fontSize:14,padding:"12px 8px"}}>
+            📋 Скопировать
+          </Btn>
+        </div>
+
+        <textarea ref={pasteRef} value={syncText} readOnly rows={2} onClick={e=>e.target.select()}
+          style={{width:"100%",fontFamily:"monospace",fontSize:9,resize:"none",
+            background:C.surface,color:C.muted,border:`1px solid ${C.border}`,
+            borderRadius:8,padding:"6px 8px",boxSizing:"border-box"}}/>
+      </>}
+
+      {syncTab==="import"&&<>
+        <div style={{background:C.purpleSoft,border:`1px solid ${C.purple}33`,borderRadius:12,
+          padding:"12px 14px",marginBottom:16,lineHeight:1.9}}>
+          <div style={{fontWeight:700,color:C.purple,marginBottom:6,fontSize:13}}>📱 С телефона / ноутбука:</div>
+          <div style={{fontSize:12,color:C.purple}}>
+            1. На другом устройстве: <b>📤 Поделиться</b> → сохранить в Заметки<br/>
+            2. Открыть Заметки → скопировать весь текст заметки<br/>
+            3. Вставить сюда и нажать <b>Загрузить</b>
+          </div>
+        </div>
+
+        {syncOp==="loaded"
+          ?<div style={{textAlign:"center",padding:"24px 0"}}>
+            <div style={{fontSize:40,marginBottom:10}}>✅</div>
+            <div style={{fontWeight:700,fontSize:16,marginBottom:6}}>Данные загружены!</div>
+            <div style={{color:C.muted,fontSize:13,marginBottom:16}}>{syncMsg}</div>
+            <Btn onClick={()=>setShowSyncModal(false)}>Закрыть</Btn>
+          </div>
+          :<>
+            <Field label="Вставьте текст из Заметок">
+              <textarea value={syncText} onChange={e=>{setSyncText(e.target.value);setSyncOp("");setSyncMsg("");}}
+                rows={5} placeholder="Вставьте скопированный текст (TTK1:...)"
+                style={{fontFamily:"monospace",fontSize:11,resize:"vertical"}} autoFocus/>
+            </Field>
+            <Btn onClick={loadFromText} variant="purple" style={{width:"100%",fontSize:15,padding:12}}
+              disabled={!syncText.trim()}>📥 Загрузить данные</Btn>
+          </>}
+      </>}
+    </Modal>}
+
+    {/* ══ МОДАЛ: JSON резервная копия ══ */}
+    {showBackup&&<Modal title="📥 Загрузить JSON" onClose={()=>{setShowBackup(false);setBackupData(null);}} width={380}>
+      {backupErr&&<div style={{background:C.accentSoft,borderRadius:8,padding:"10px 14px",color:C.accent,fontSize:13,marginBottom:14}}>⚠ {backupErr}</div>}
+      {backupData&&<>
+        <div style={{background:C.greenSoft,border:`1px solid ${C.green}44`,borderRadius:10,padding:14,marginBottom:14}}>
+          <div style={{fontWeight:700,color:C.green,marginBottom:8}}>✓ Файл распознан</div>
+          <div style={{display:"flex",gap:12}}>
+            {[{l:"Продуктов",v:backupData.products?.length||0,c:C.teal},
+              {l:"Полуфабр.",v:backupData.semis?.length||0,c:C.purple},
+              {l:"Блюд",v:backupData.dishes?.length||0,c:C.accent}]
+              .map(({l,v,c})=><div key={l} style={{flex:1,background:C.card,borderRadius:8,padding:"8px 6px",textAlign:"center"}}>
+                <div style={{fontWeight:800,fontSize:18,color:c}}>{v}</div>
+                <div style={{fontSize:10,color:C.muted}}>{l}</div>
+              </div>)}
+          </div>
+        </div>
+        <div style={{display:"flex",gap:8}}>
+          <Btn onClick={confirmBackup} variant="success" style={{flex:1}}>✓ Загрузить</Btn>
+          <Btn variant="outline" onClick={()=>{setShowBackup(false);setBackupData(null);}}>Отмена</Btn>
+        </div>
+      </>}
+    </Modal>}
+
+    {/* ══ ВКЛАДКИ ══ */}
+    <div style={{background:C.surface,borderBottom:`1px solid ${C.border}`,padding:"0 12px",display:"flex",gap:2,overflowX:"auto"}}>
+      {TABS.map((t,i)=><button key={t.id} onClick={()=>setTab(t.id)}
+        style={{background:"none",color:tab===t.id?C.accent:C.muted,border:"none",
+          borderBottom:`2px solid ${tab===t.id?C.accent:"transparent"}`,
+          padding:"14px 10px",fontSize:13,fontWeight:tab===t.id?700:500,whiteSpace:"nowrap",
+          display:"flex",alignItems:"center",gap:6}}>
+        <span style={{background:tab===t.id?C.accent:C.tag,color:tab===t.id?"#08090f":C.muted,
+          borderRadius:"50%",width:18,height:18,display:"inline-flex",alignItems:"center",
+          justifyContent:"center",fontSize:10,fontWeight:800}}>{i+1}</span>
+        {t.label}
+      </button>)}
+    </div>
+
+    <div style={{padding:16,maxWidth:1300,margin:"0 auto"}}>
+      {tab==="products"&&<ProductsTab state={state} dispatch={dispatch}/>}
+      {tab==="semis"&&   <SemisTab    state={state} dispatch={dispatch}/>}
+      {tab==="dishes"&&  <DishesTab   state={state} dispatch={dispatch}/>}
+    </div>
+  </div>;
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>
