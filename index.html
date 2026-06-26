@@ -1623,7 +1623,120 @@ async function sbCreateTable(){
 }
 
 // ════════════════════ ROOT APP ════════════════════
+
+// ════════════════════ ЭКРАН ВХОДА ════════════════════
+const PASSWORD_HASH = "ttksushi2026"; // простой пароль — смените на свой
+// Для смены пароля: измените строку выше на любое слово/фразу
+
+function LoginScreen({onLogin}){
+  const [pwd, setPwd] = useState("");
+  const [error, setError] = useState(false);
+  const [show, setShow] = useState(false);
+
+  function tryLogin(){
+    if(pwd === PASSWORD_HASH){
+      try{ localStorage.setItem("ttk_auth", "1"); }catch{}
+      onLogin();
+    } else {
+      setError(true);
+      setTimeout(()=>setError(false), 1500);
+      setPwd("");
+    }
+  }
+
+  return <div style={{
+    minHeight:"100vh", display:"flex", alignItems:"center",
+    justifyContent:"center", background:C.bg, padding:24,
+    backgroundImage:`
+      radial-gradient(ellipse 900px 600px at 0% 0%, rgba(74,222,128,.05), transparent),
+      radial-gradient(ellipse 700px 500px at 100% 100%, rgba(74,222,128,.03), transparent)
+    `
+  }}>
+    <div style={{width:"100%", maxWidth:360}}>
+
+      {/* Логотип */}
+      <div style={{textAlign:"center", marginBottom:40}}>
+        <div style={{
+          width:72, height:72, borderRadius:20, margin:"0 auto 16px",
+          background:`linear-gradient(135deg,${C.green},${C.teal})`,
+          display:"flex", alignItems:"center", justifyContent:"center",
+          fontSize:36, boxShadow:`0 0 40px ${C.green}44`
+        }}>🍱</div>
+        <div style={{
+          fontFamily:"'Playfair Display',serif", fontWeight:700,
+          fontSize:24, color:C.text, marginBottom:6
+        }}>ТТК Суши-бар</div>
+        <div style={{
+          fontSize:12, color:C.muted, letterSpacing:"1.5px",
+          textTransform:"uppercase"
+        }}>Технологические карты</div>
+      </div>
+
+      {/* Форма входа */}
+      <div style={{
+        background:C.card, border:`1px solid ${C.border}`,
+        borderRadius:18, padding:28,
+        boxShadow:"0 20px 60px rgba(0,0,0,.4)"
+      }}>
+        <div style={{
+          fontSize:13, color:C.muted, marginBottom:20,
+          textAlign:"center", fontWeight:500
+        }}>Введите пароль для доступа</div>
+
+        <div style={{position:"relative", marginBottom:12}}>
+          <input
+            type={show?"text":"password"}
+            value={pwd}
+            onChange={e=>{setPwd(e.target.value); setError(false);}}
+            onKeyDown={e=>e.key==="Enter"&&tryLogin()}
+            placeholder="Пароль"
+            autoFocus
+            style={{
+              width:"100%", padding:"13px 44px 13px 16px",
+              fontSize:16, borderRadius:12,
+              background:C.surface,
+              border:`1px solid ${error?C.accent:pwd?C.green:C.border}`,
+              color:C.text, outline:"none",
+              transition:"border-color .2s, box-shadow .2s",
+              boxShadow: pwd&&!error?`0 0 0 3px ${C.green}22`:"none"
+            }}
+          />
+          <button onClick={()=>setShow(s=>!s)} style={{
+            position:"absolute", right:12, top:"50%",
+            transform:"translateY(-50%)",
+            background:"none", color:C.muted, fontSize:16,
+            padding:4, border:"none"
+          }}>{show?"🙈":"👁"}</button>
+        </div>
+
+        {error&&<div style={{
+          background:C.accentSoft, border:`1px solid ${C.accent}44`,
+          borderRadius:8, padding:"8px 12px", fontSize:13,
+          color:C.accent, textAlign:"center", marginBottom:12
+        }}>Неверный пароль</div>}
+
+        <button onClick={tryLogin} style={{
+          width:"100%", padding:"13px",
+          background:`linear-gradient(135deg,${C.green},${C.teal})`,
+          color:"#08090f", border:"none", borderRadius:12,
+          fontSize:15, fontWeight:700, cursor:"pointer",
+          boxShadow:`0 4px 20px ${C.green}44`,
+          transition:"opacity .15s"
+        }}>Войти</button>
+      </div>
+
+      <div style={{
+        textAlign:"center", marginTop:20,
+        fontSize:11, color:C.muted, letterSpacing:".5px"
+      }}>🔒 Защищённый доступ</div>
+    </div>
+  </div>;
+}
+
 function App(){
+  const [authed, setAuthed] = useState(()=>{
+    try{ return localStorage.getItem("ttk_auth")==="1"; }catch{ return false; }
+  });
   const [state, setState]      = useState({products:[],semis:[],dishes:[]});
   const [appReady, setReady]   = useState(false);
   const [tab, setTab]          = useState("products");
@@ -1887,6 +2000,8 @@ function App(){
     {id:"dishes",  label:"Готовые блюда",         icon:"🍱"},
   ];
 
+  if(!authed) return <LoginScreen onLogin={()=>setAuthed(true)}/>;
+
   if(!appReady) return <div style={{minHeight:"100vh",display:"flex",alignItems:"center",
     justifyContent:"center",flexDirection:"column",gap:20,background:C.bg}}>
     <div style={{
@@ -1939,6 +2054,13 @@ function App(){
         <button onClick={manualSync} title="Синхронизировать" style={{
           background:"transparent",border:`1px solid ${C.border}`,
           borderRadius:10,padding:"7px 10px",fontSize:14,color:C.muted}}>🔄</button>
+        <button onClick={()=>{
+          try{localStorage.removeItem("ttk_auth");}catch{}
+          setAuthed(false);
+        }} style={{
+          background:"transparent",border:`1px solid ${C.border}`,
+          borderRadius:10,padding:"7px 14px",fontSize:12,
+          color:C.muted,fontWeight:600}}>Выйти</button>
 
         {/* Статус Supabase */}
         <div style={{display:"flex",alignItems:"center",gap:6,
