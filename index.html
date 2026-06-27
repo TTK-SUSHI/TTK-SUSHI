@@ -1750,6 +1750,40 @@ function App(){
   const skipSave     = useRef(false);
   const lastSbTs     = useRef(0);
 
+  // ── Офлайн режим ──
+  const [isOnline, setIsOnline] = useState(()=>{
+    try{ return navigator.onLine; }catch{ return true; }
+  });
+  const pendingSync = useRef(false); // есть несохранённые изменения
+
+  // Отслеживаем появление/пропадание интернета
+  useEffect(()=>{
+    function goOnline(){
+      setIsOnline(true);
+      // При восстановлении сети — синхронизируем несохранённые изменения
+      if(pendingSync.current){
+        const ts = Date.now();
+        sbSave({ts, products:state.products, semis:state.semis, dishes:state.dishes})
+          .then(()=>{
+            lastSbTs.current = ts;
+            LS.set("ttk_ts", ts);
+            pendingSync.current = false;
+            setSync("saved");
+            setSbError("");
+            setTimeout(()=>setSync(s=>s==="saved"?"idle":s), 2500);
+          })
+          .catch(()=>setSync("error"));
+      }
+    }
+    function goOffline(){ setIsOnline(false); setSync("offline"); }
+    window.addEventListener("online", goOnline);
+    window.addEventListener("offline", goOffline);
+    return ()=>{
+      window.removeEventListener("online", goOnline);
+      window.removeEventListener("offline", goOffline);
+    };
+  },[state]);
+
   // ── Загрузка при старте ──
   useEffect(()=>{
     (async()=>{
@@ -1813,9 +1847,17 @@ function App(){
     if(isFirstState.current){ isFirstState.current=false; return; }
     if(skipSave.current){ skipSave.current=false; return; }
 
+    // Всегда сохраняем локально (работает офлайн)
     LS.set("products",state.products);
     LS.set("semis",   state.semis);
     LS.set("dishes",  state.dishes);
+
+    // Если нет интернета — помечаем что есть несохранённые изменения
+    if(!isOnline){
+      pendingSync.current = true;
+      setSync("offline");
+      return;
+    }
 
     setSync("saving");
     clearTimeout(saveTimer.current);
@@ -1825,6 +1867,7 @@ function App(){
         await sbSave({ts, products:state.products, semis:state.semis, dishes:state.dishes});
         lastSbTs.current = ts;
         LS.set("ttk_ts", ts);
+        pendingSync.current = false;
         setSyncTime(ts);
         setSync("saved");
         setSbError("");
@@ -1833,18 +1876,28 @@ function App(){
         if(e.message==="TABLE_NOT_FOUND"){
           setSbError("table");
           setShowSetup(true);
+          setSync("error");
+        } else if(!navigator.onLine){
+          // Потеряли сеть во время сохранения
+          pendingSync.current = true;
+          setIsOnline(false);
+          setSync("offline");
         } else {
           setSbError(e.message||"Ошибка сохранения");
+          pendingSync.current = true;
+          setSync("error");
         }
-        setSync("error");
       }
     }, 800);
-  },[state, appReady]);
+  },[state, appReady, isOnline]);
 
   // ── Автополинг каждые 8 сек ──
   useEffect(()=>{
     if(!appReady) return;
     const poll = setInterval(async()=>{
+      if(!navigator.onLine) return; // офлайн — не опрашиваем
+      // Не перезаписываем локальные несохранённые изменения
+      if(pendingSync.current) return;
       try{
         const sbData = await sbLoad();
         if(sbData && sbData.ts && sbData.ts > lastSbTs.current + 500){
@@ -2064,22 +2117,26 @@ function App(){
 
         {/* Статус Supabase */}
         <div style={{display:"flex",alignItems:"center",gap:6,
-          background:sync==="saved"||sync==="synced"?`${C.green}15`:"transparent",
-          border:`1px solid ${sync==="saved"||sync==="synced"?C.green+"44":sync==="saving"?C.yellow+"44":sync==="error"?C.accent+"44":C.border}`,
+          background:sync==="offline"?`${C.yellow}15`:sync==="saved"||sync==="synced"?`${C.green}15`:"transparent",
+          border:`1px solid ${sync==="offline"?C.yellow+"66":sync==="saved"||sync==="synced"?C.green+"44":sync==="saving"?C.yellow+"44":sync==="error"?C.accent+"44":C.border}`,
           borderRadius:20,padding:"6px 12px",transition:"all .3s",cursor:sync==="error"?"pointer":"default"}}
           onClick={sync==="error"?()=>setShowSetup(true):undefined}
-          title={sbError||"Supabase"}>
+          title={sync==="offline"?"Нет интернета — изменения сохранятся локально и синхронизируются автоматически":(sbError||"Supabase")}>
           <span style={{
             width:7,height:7,borderRadius:"50%",flexShrink:0,
-            background:sync==="saved"||sync==="synced"?C.green:sync==="saving"?C.yellow:sync==="error"?C.accent:C.muted,
-            boxShadow:sync==="saved"||sync==="synced"?`0 0 6px ${C.green}`:"none",
+            background:sync==="offline"?C.yellow:sync==="saved"||sync==="synced"?C.green:sync==="saving"?C.yellow:sync==="error"?C.accent:C.muted,
+            boxShadow:sync==="offline"?`0 0 6px ${C.yellow}`:sync==="saved"||sync==="synced"?`0 0 6px ${C.green}`:"none",
             ...(sync==="saving"?{animation:"spin .9s linear infinite",display:"inline-block"}:{})
           }}/>
           <span style={{fontSize:11,fontWeight:600,whiteSpace:"nowrap",
-            color:sync==="saved"||sync==="synced"?C.green:sync==="saving"?C.yellow:sync==="error"?C.accent:C.muted}}>
-            {sync==="saved"?"Сохранено":sync==="synced"?"Обновлено":sync==="saving"?"Синхронизация…":sync==="error"?"Ошибка ↗":"Авто"}
+            color:sync==="offline"?C.yellow:sync==="saved"||sync==="synced"?C.green:sync==="saving"?C.yellow:sync==="error"?C.accent:C.muted}}>
+            {sync==="offline"?"📴 Офлайн":sync==="saved"?"Сохранено":sync==="synced"?"Обновлено":sync==="saving"?"Синхронизация…":sync==="error"?"Ошибка ↗":"Авто"}
           </span>
         </div>
+        {/* Баннер несохранённых изменений */}
+        {!isOnline&&pendingSync.current&&<span style={{fontSize:10,color:C.yellow,fontWeight:600}}>
+          есть несохранённые
+        </span>}
         <input ref={importRef} type="file" accept=".json" onChange={handleImportFile} style={{display:"none"}}/>
       </div>
     </div>
