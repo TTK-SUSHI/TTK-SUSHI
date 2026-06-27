@@ -3,6 +3,10 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<meta name="theme-color" content="#0D0F0B"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<meta name="apple-mobile-web-app-title" content="ТТК Суши"/>
 <title>ТТК — Суши Бар</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet"/>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
@@ -2292,6 +2296,96 @@ function App(){
 }
 
 ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+
+<!-- ═══════ SERVICE WORKER — ОФЛАЙН РЕЖИМ ═══════ -->
+<script>
+(function(){
+  if(!("serviceWorker" in navigator)) return;
+
+  // Service Worker встроен через Blob — отдельный файл не нужен
+  const swCode = `
+    const CACHE = "ttk-cache-v1";
+    // Ресурсы которые кэшируем для офлайн-работы
+    const ASSETS = [
+      "https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js",
+      "https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js",
+      "https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js",
+      "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:wght@600;700&display=swap"
+    ];
+
+    // При установке — кэшируем библиотеки
+    self.addEventListener("install", (e)=>{
+      self.skipWaiting();
+      e.waitUntil(
+        caches.open(CACHE).then((cache)=>{
+          return Promise.allSettled(ASSETS.map((url)=>cache.add(url).catch(()=>{})));
+        })
+      );
+    });
+
+    // Активация — удаляем старые кэши
+    self.addEventListener("activate", (e)=>{
+      e.waitUntil(
+        caches.keys().then((keys)=>
+          Promise.all(keys.filter((k)=>k!==CACHE).map((k)=>caches.delete(k)))
+        ).then(()=>self.clients.claim())
+      );
+    });
+
+    // Перехват запросов
+    self.addEventListener("fetch", (e)=>{
+      const url = e.request.url;
+
+      // НИКОГДА не кэшируем запросы к Supabase — данные всегда свежие из сети
+      if(url.includes("supabase.co")){
+        return; // пропускаем, идёт обычный сетевой запрос
+      }
+
+      // Для страницы и библиотек: сначала сеть, при ошибке — кэш
+      if(e.request.method === "GET"){
+        e.respondWith(
+          fetch(e.request)
+            .then((resp)=>{
+              // Успешный ответ — обновляем кэш
+              if(resp && resp.status === 200){
+                const clone = resp.clone();
+                caches.open(CACHE).then((cache)=>cache.put(e.request, clone).catch(()=>{}));
+              }
+              return resp;
+            })
+            .catch(()=>{
+              // Нет сети — берём из кэша
+              return caches.match(e.request).then((cached)=>{
+                if(cached) return cached;
+                // Если запрашивают страницу а её нет в кэше — отдаём корень
+                if(e.request.mode === "navigate"){
+                  return caches.match("/") || caches.match("./");
+                }
+                return new Response("Офлайн", {status:503});
+              });
+            })
+        );
+      }
+    });
+  `;
+
+  try{
+    const blob = new Blob([swCode], {type:"application/javascript"});
+    const swUrl = URL.createObjectURL(blob);
+    navigator.serviceWorker.register(swUrl, {scope:"./"})
+      .then(()=>{
+        // Дополнительно кэшируем саму страницу
+        if(navigator.onLine){
+          caches.open("ttk-cache-v1").then((cache)=>{
+            cache.add(window.location.href).catch(()=>{});
+            cache.add("./").catch(()=>{});
+          });
+        }
+      })
+      .catch(()=>{}); // тихо игнорируем если SW не поддерживается
+  }catch(e){}
+})();
 </script>
 </body>
 </html>
