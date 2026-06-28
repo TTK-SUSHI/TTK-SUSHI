@@ -85,6 +85,12 @@ const markupPct=(cost,price)=>price?Math.round(((price-cost)/price)*100):0;
 const NOW=Date.now();
 const DISH_CATEGORIES=["Комбо","Сеты","Суши","Роллы 8шт","Роллы 10шт","Пицца 25см","Пицца 30см","Бургеры","Вок","Закуски","Напитки"];
 const PRODUCT_CATEGORIES=["Рыба","Мясо","Овощи","Сыры","Соуса","Специи","Масла","Упаковка","Другое"];
+// Иконка по категории продукта
+const CATEGORY_ICONS={
+  "Рыба":"🐟","Мясо":"🥩","Овощи":"🥦","Сыры":"🧀","Соуса":"🫙",
+  "Специи":"🧂","Масла":"🛢️","Упаковка":"📦","Другое":"🍶"
+};
+const catIcon=(category)=>CATEGORY_ICONS[category]||"🍶";
 const SET_CATEGORIES=["Комбо","Сеты"];
 const ROLL_CATEGORIES=["Роллы 8шт","Роллы 10шт"];
 const PIZZA_CATEGORIES=["Пицца 25см","Пицца 30см"];
@@ -510,6 +516,9 @@ function ProductsTab({state,dispatch}){
   const [showHistory,setShowHistory]=useState(null);
   const [editId,setEditId]=useState(null);
   const [newPrice,setNewPrice]=useState("");
+  const [priceMode,setPriceMode]=useState("direct"); // direct | calc
+  const [buyTotal,setBuyTotal]=useState(""); // сколько заплатил
+  const [buyQty,setBuyQty]=useState(""); // сколько купил (в кг/л/шт)
   const [confirmDel,setConfirmDel]=useState(null); // {id, name}
   const empty={name:"",unit:"г",priceFor:"кг",category:PRODUCT_CATEGORIES[0]};
   const [form,setForm]=useState(empty);
@@ -537,9 +546,17 @@ function ProductsTab({state,dispatch}){
     setConfirmDel({id,name:p?.name||"",blocked:usedInSemi||usedInDish});
   }
   function addPrice(pid){
-    if(!newPrice)return;
-    dispatch({type:"ADD_PRICE",id:pid,price:+newPrice});
-    setNewPrice("");setShowPrice(null);
+    // В режиме калькулятора вычисляем цену за единицу
+    let finalPrice;
+    if(priceMode==="calc"){
+      if(!buyTotal||!buyQty||+buyQty===0)return;
+      finalPrice=Math.round((+buyTotal/+buyQty)*100)/100;
+    } else {
+      if(!newPrice)return;
+      finalPrice=+newPrice;
+    }
+    dispatch({type:"ADD_PRICE",id:pid,price:finalPrice});
+    setNewPrice("");setBuyTotal("");setBuyQty("");setPriceMode("direct");setShowPrice(null);
   }
 
   const histProd=showHistory?products.find(p=>p.id===showHistory):null;
@@ -590,7 +607,7 @@ function ProductsTab({state,dispatch}){
               </td>
               <td>
                 <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
-                  <Btn size="sm" variant="purple" onClick={()=>{setShowPrice(p.id);setNewPrice("");}}>₸ Цена</Btn>
+                  <Btn size="sm" variant="purple" onClick={()=>{setShowPrice(p.id);setNewPrice("");setBuyTotal("");setBuyQty("");setPriceMode("direct");}}>₸ Цена</Btn>
                   <Btn size="sm" variant="ghost" onClick={()=>setShowHistory(p.id)}>📋</Btn>
                   <Btn size="sm" variant="outline" onClick={()=>openEdit(p)}>✏</Btn>
                   <Btn size="sm" variant="danger" onClick={()=>del(p.id)}>✕</Btn>
@@ -683,28 +700,82 @@ function ProductsTab({state,dispatch}){
     </Modal>}
 
     {/* ══ МОДАЛ: Новая цена ══ */}
-    {showPrice&&priceProd&&<Modal title={`Новая цена: ${priceProd.name}`} onClose={()=>setShowPrice(null)} width={360}>
+    {showPrice&&priceProd&&<Modal title={`Цена: ${priceProd.name}`} onClose={()=>setShowPrice(null)} width={400}>
       <div style={{background:C.card,borderRadius:10,padding:14,marginBottom:16}}>
         <div style={{fontSize:12,color:C.muted}}>Текущая цена</div>
         <div style={{fontWeight:700,fontSize:20,marginTop:4,color:C.blue}}>
           {fmt(priceProd.priceHistory?.[priceProd.priceHistory.length-1]?.price||0)} ₸/{priceProd.priceFor}
         </div>
       </div>
-      <Field label={`Новая цена (₸/${priceProd.priceFor})`}>
-        <input type="number" value={newPrice} onChange={e=>setNewPrice(e.target.value)} autoFocus/>
-      </Field>
-      {newPrice&&<div style={{background:C.purpleSoft,border:`1px solid ${C.purple}66`,borderRadius:8,padding:10,marginBottom:12,fontSize:13}}>
-        <span style={{color:C.purple,fontWeight:700}}>Изменение: </span>
-        <span style={{fontWeight:800,color:(+newPrice-(priceProd.priceHistory?.[priceProd.priceHistory.length-1]?.price||0))>0?C.accent:C.green}}>
-          {(+newPrice-(priceProd.priceHistory?.[priceProd.priceHistory.length-1]?.price||0))>0?"+":""}
-          {fmt(+newPrice-(priceProd.priceHistory?.[priceProd.priceHistory.length-1]?.price||0))} ₸
-        </span>
-      </div>}
+
+      {/* Переключатель режима */}
+      <div style={{display:"flex",gap:6,marginBottom:16,background:C.surface,
+        padding:4,borderRadius:10,border:`1px solid ${C.border}`}}>
+        <button onClick={()=>setPriceMode("direct")} style={{
+          flex:1,background:priceMode==="direct"?C.green:"transparent",
+          color:priceMode==="direct"?C.bg:C.muted,
+          border:"none",borderRadius:7,padding:"8px",fontSize:12,fontWeight:700}}>
+          Цена за {priceProd.priceFor}
+        </button>
+        <button onClick={()=>setPriceMode("calc")} style={{
+          flex:1,background:priceMode==="calc"?C.green:"transparent",
+          color:priceMode==="calc"?C.bg:C.muted,
+          border:"none",borderRadius:7,padding:"8px",fontSize:12,fontWeight:700}}>
+          🧮 Расчёт закупки
+        </button>
+      </div>
+
+      {/* Режим: прямая цена */}
+      {priceMode==="direct"&&<>
+        <Field label={`Новая цена (₸/${priceProd.priceFor})`}>
+          <input type="number" value={newPrice} onChange={e=>setNewPrice(e.target.value)} autoFocus/>
+        </Field>
+        {newPrice&&<div style={{background:C.purpleSoft,border:`1px solid ${C.purple}66`,borderRadius:8,padding:10,marginBottom:12,fontSize:13}}>
+          <span style={{color:C.purple,fontWeight:700}}>Изменение: </span>
+          <span style={{fontWeight:800,color:(+newPrice-(priceProd.priceHistory?.[priceProd.priceHistory.length-1]?.price||0))>0?C.accent:C.green}}>
+            {(+newPrice-(priceProd.priceHistory?.[priceProd.priceHistory.length-1]?.price||0))>0?"+":""}
+            {fmt(+newPrice-(priceProd.priceHistory?.[priceProd.priceHistory.length-1]?.price||0))} ₸
+          </span>
+        </div>}
+      </>}
+
+      {/* Режим: калькулятор закупки */}
+      {priceMode==="calc"&&<>
+        <div style={{background:C.tealSoft,border:`1px solid ${C.teal}44`,borderRadius:10,
+          padding:"10px 14px",fontSize:12,color:C.teal,marginBottom:16,lineHeight:1.6}}>
+          Введите сколько заплатили и сколько купили — программа сама посчитает цену за {priceProd.priceFor}.
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:8}}>
+          <Field label="Заплатил (₸)">
+            <input type="number" value={buyTotal} onChange={e=>setBuyTotal(e.target.value)}
+              placeholder="25000" autoFocus/>
+          </Field>
+          <Field label={`Купил (${priceProd.priceFor})`}>
+            <input type="number" value={buyQty} onChange={e=>setBuyQty(e.target.value)}
+              placeholder="13.5"/>
+          </Field>
+        </div>
+        {buyTotal&&buyQty&&+buyQty>0&&<div style={{
+          background:`linear-gradient(135deg,${C.greenSoft},${C.tealSoft})`,
+          border:`1px solid ${C.green}66`,borderRadius:10,padding:14,marginBottom:12}}>
+          <div style={{fontSize:11,color:C.muted,textTransform:"uppercase",letterSpacing:"1px",marginBottom:4}}>
+            Цена за 1 {priceProd.priceFor}
+          </div>
+          <div style={{fontWeight:800,fontSize:24,color:C.green}}>
+            {fmt(Math.round((+buyTotal/+buyQty)*100)/100)} ₸
+          </div>
+          <div style={{fontSize:12,color:C.muted,marginTop:4}}>
+            {fmt(+buyTotal)} ₸ ÷ {buyQty} {priceProd.priceFor} = {fmt(Math.round((+buyTotal/+buyQty)*100)/100)} ₸/{priceProd.priceFor}
+          </div>
+        </div>}
+      </>}
+
       <div style={{background:C.yellowSoft,border:`1px solid ${C.yellow}`,borderRadius:8,padding:10,marginBottom:14,fontSize:12,color:C.yellow}}>
         ⚡ После обновления себестоимость всех полуфабрикатов и блюд пересчитается автоматически
       </div>
       <div style={{display:"flex",gap:8}}>
-        <Btn onClick={()=>addPrice(priceProd.id)} variant="purple" style={{flex:1}}>Обновить цену</Btn>
+        <Btn onClick={()=>addPrice(priceProd.id)} variant="purple" style={{flex:1}}
+          disabled={priceMode==="direct"?!newPrice:(!buyTotal||!buyQty)}>Обновить цену</Btn>
         <Btn variant="outline" onClick={()=>setShowPrice(null)}>Отмена</Btn>
       </div>
     </Modal>}
@@ -840,7 +911,7 @@ function SemisTab({state,dispatch}){
             {(s.composition||[]).map(c=>{
               const p=products.find(p=>p.id===c.productId);
               return p?<span key={c.productId} style={{background:C.tag,borderRadius:20,padding:"3px 10px",fontSize:12,border:`1px solid ${C.border}`}}>
-                🥦 {p.name} {c.qty}{p.unit}
+                {catIcon(p.category)} {p.name} {c.qty}{p.unit}
               </span>:null;
             })}
             {(s.semiLines||[]).map(r=>{
@@ -1071,6 +1142,8 @@ function DishesTab({state,dispatch}){
   const empty={name:"",category:DISH_CATEGORIES[0],price:"",weightOverride:"",productLines:[],semiLines:[],dishLines:[],packLines:[]};
   const [form,setForm]=useState(empty);
   const [pRow,setPRow]=useState({productId:"",brutto:"",loss:""});
+  const [pCatFilter,setPCatFilter]=useState("all"); // фильтр категории при выборе продукта
+  const [pSearch,setPSearch]=useState(""); // поиск по названию продукта
   const [sRow,setSRow]=useState({semiId:"",qty:""});
   const [dRow,setDRow]=useState({dishId:"",qty:"",pcs:""});
   const [pkRow,setPkRow]=useState({productId:"",qty:""});
@@ -1323,9 +1396,36 @@ function DishesTab({state,dispatch}){
         </div>}
         <div style={{background:C.card,borderRadius:10,padding:12,marginBottom:14}}>
           <div style={{fontSize:12,color:C.muted,fontWeight:700,textTransform:"uppercase",marginBottom:8}}>Добавить продукт</div>
+
+          {/* Фильтр по категориям */}
+          <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:8}}>
+            <button onClick={()=>setPCatFilter("all")} style={{
+              background:pCatFilter==="all"?C.green:C.surface,
+              color:pCatFilter==="all"?C.bg:C.muted,
+              border:`1px solid ${pCatFilter==="all"?C.green:C.border}`,
+              borderRadius:7,padding:"4px 10px",fontSize:11,fontWeight:700}}>Все</button>
+            {PRODUCT_CATEGORIES.filter(c=>c!=="Упаковка").map(cat=>(
+              <button key={cat} onClick={()=>setPCatFilter(cat)} style={{
+                background:pCatFilter===cat?C.green:C.surface,
+                color:pCatFilter===cat?C.bg:C.muted,
+                border:`1px solid ${pCatFilter===cat?C.green:C.border}`,
+                borderRadius:7,padding:"4px 10px",fontSize:11,fontWeight:600}}>{cat}</button>
+            ))}
+          </div>
+
+          {/* Поиск по названию */}
+          <input value={pSearch} onChange={e=>setPSearch(e.target.value)}
+            placeholder="🔍 Поиск продукта…"
+            style={{marginBottom:8,fontSize:13,padding:"8px 12px"}}/>
+
           <Field label="Продукт"><select value={pRow.productId} onChange={e=>setPRow(r=>({...r,productId:e.target.value}))}>
             <option value="">— выберите —</option>
-            {products.filter(p=>p.category!=="Упаковка"&&!form.productLines.find(l=>l.productId===p.id)).map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
+            {products
+              .filter(p=>p.category!=="Упаковка")
+              .filter(p=>pCatFilter==="all"||p.category===pCatFilter)
+              .filter(p=>!pSearch||p.name.toLowerCase().includes(pSearch.toLowerCase()))
+              .filter(p=>!form.productLines.find(l=>l.productId===p.id))
+              .map(p=><option key={p.id} value={p.id}>{p.name} — {p.category}</option>)}
           </select></Field>
           <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"flex-end"}}>
             <Field label="Брутто,г" style={{flex:1,minWidth:100}}><input type="number" value={pRow.brutto} onChange={e=>setPRow(r=>({...r,brutto:e.target.value}))}/></Field>
