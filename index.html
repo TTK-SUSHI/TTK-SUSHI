@@ -83,7 +83,7 @@ const markupPct=(cost,price)=>price?Math.round(((price-cost)/price)*100):0;
 
 // ════════════════════ ДАННЫЕ ════════════════════
 const NOW=Date.now();
-const DISH_CATEGORIES=["Комбо","Сеты","Суши","Роллы 8шт","Роллы 10шт","Пицца 25см","Пицца 30см","Бургеры","Вок","Закуски","Напитки"];
+const DISH_CATEGORIES=["Комбо","Сеты","Суши","Классические роллы","Жареные роллы","Запечённые роллы","Сложные роллы","Роллы 8шт","Роллы 10шт","Пицца 25см","Пицца 30см","Бургеры","Вок","Закуски","Напитки"];
 const PRODUCT_CATEGORIES=["Рыба","Мясо","Овощи","Сыры","Соуса","Специи","Масла","Упаковка","Другое"];
 // Иконка по категории продукта
 const CATEGORY_ICONS={
@@ -92,7 +92,14 @@ const CATEGORY_ICONS={
 };
 const catIcon=(category)=>CATEGORY_ICONS[category]||"🍶";
 const SET_CATEGORIES=["Комбо","Сеты"];
-const ROLL_CATEGORIES=["Роллы 8шт","Роллы 10шт"];
+const ROLL_CATEGORIES=["Классические роллы","Жареные роллы","Запечённые роллы","Сложные роллы","Роллы 8шт","Роллы 10шт"];
+// Сколько штук в ролле по категории (новые типы = 8 шт)
+const rollPcs=(category)=>{
+  if(category==="Роллы 10шт")return 10;
+  if(category==="Роллы 8шт")return 8;
+  if(["Классические роллы","Жареные роллы","Запечённые роллы","Сложные роллы"].includes(category))return 8;
+  return null;
+};
 const PIZZA_CATEGORIES=["Пицца 25см","Пицца 30см"];
 const isRollCat=(cat)=>ROLL_CATEGORIES.includes(cat);
 const isPizzaCat=(cat)=>PIZZA_CATEGORIES.includes(cat);
@@ -161,7 +168,7 @@ function dishCost(dish,products,semis,dishes){
     const d=dishes?.find(d=>d.id===r.dishId);
     if(!d||d.id===dish.id)return s;
     // Если ролл и указаны штуки — считаем по 1 шт, умножаем на pcs
-    const stdPcs=d.category==="Роллы 8шт"?8:d.category==="Роллы 10шт"?10:null;
+    const stdPcs=rollPcs(d.category);
     const costPerUnit=dishCost(d,products,semis,dishes);
     const effectiveCost=stdPcs&&r.pcs?costPerUnit/stdPcs*r.pcs*r.qty:costPerUnit*r.qty;
     const packCost=isSetCat(dish.category)?dishPackagingCost(d,products)*r.qty:0;
@@ -180,7 +187,7 @@ function dishWeight(dish,dishes){
   const fromDishes=(dish.dishLines||[]).reduce((s,r)=>{
     const d=dishes?.find(d=>d.id===r.dishId);
     if(!d||d.id===dish.id)return s;
-    const stdPcs=d.category==="Роллы 8шт"?8:d.category==="Роллы 10шт"?10:null;
+    const stdPcs=rollPcs(d.category);
     const wPerUnit=(d.weightOverride||dishWeight(d,dishes));
     const effectiveW=stdPcs&&r.pcs?wPerUnit/stdPcs*r.pcs*r.qty:wPerUnit*r.qty;
     return s+effectiveW;
@@ -1175,7 +1182,7 @@ function DishesTab({state,dispatch}){
     if(!dRow.dishId||!dRow.qty)return;
     const d=dishes.find(d=>d.id===+dRow.dishId);
     const isRoll=d&&isRollCat(d.category);
-    const defaultPcs=d?.category==="Роллы 8шт"?8:d?.category==="Роллы 10шт"?10:null;
+    const defaultPcs=rollPcs(d?.category);
     const line={dishId:+dRow.dishId,qty:+dRow.qty};
     if(isRoll) line.pcs=dRow.pcs?+dRow.pcs:defaultPcs;
     setForm(f=>({...f,dishLines:[...f.dishLines,line]}));
@@ -1248,6 +1255,10 @@ function DishesTab({state,dispatch}){
         <h3 style={{fontSize:15,fontWeight:700,fontFamily:"'Playfair Display',serif"}}>
           {g.cat==="Роллы 8шт"?"🍣 Роллы (8 шт)":
            g.cat==="Роллы 10шт"?"🍣 Роллы (10 шт)":
+           g.cat==="Классические роллы"?"🍣 Классические роллы":
+           g.cat==="Жареные роллы"?"🔥 Жареные роллы":
+           g.cat==="Запечённые роллы"?"🧀 Запечённые роллы":
+           g.cat==="Сложные роллы"?"⭐ Сложные роллы":
            g.cat==="Пицца 25см"?"🍕 Пицца 25 см":
            g.cat==="Пицца 30см"?"🍕 Пицца 30 см":
            g.cat}
@@ -1266,7 +1277,7 @@ function DishesTab({state,dispatch}){
                   {d.name}
                   {isRollCat(d.category)&&<span style={{marginLeft:6,fontSize:11,
                     color:C.green,background:`${C.green}15`,borderRadius:6,padding:"1px 7px",fontWeight:700}}>
-                    {d.category==="Роллы 8шт"?"8 шт":"10 шт"}
+                    {rollPcs(d.category)} шт
                   </span>}
                   {isPizzaCat(d.category)&&<span style={{marginLeft:6,fontSize:11,
                     color:C.yellow,background:`${C.yellow}15`,borderRadius:6,padding:"1px 7px",fontWeight:700}}>
@@ -1276,7 +1287,7 @@ function DishesTab({state,dispatch}){
                 <td style={{color:C.muted}}>
                   {fmt2(weight)} г
                   {isRollCat(d.category)&&<div style={{fontSize:11,color:C.muted,marginTop:2}}>
-                    ~{fmt2(weight/(d.category==="Роллы 8шт"?8:10))} г/шт
+                    ~{fmt2(weight/rollPcs(d.category))} г/шт
                   </div>}
                 </td>
                 <td><PriceTag value={Math.round(cost)} cost={cost} price={d.price} kind="cost"/></td>
@@ -1323,16 +1334,16 @@ function DishesTab({state,dispatch}){
         <span style={{fontSize:20}}>🍣</span>
         <div>
           <div style={{fontWeight:700,fontSize:13,color:C.green,marginBottom:2}}>
-            {form.category === "Роллы 8шт" ? "Ролл: 8 штук в порции" : "Ролл: 10 штук в порции"}
+            Ролл: {rollPcs(form.category)} штук в порции
           </div>
           <div style={{fontSize:12,color:C.muted}}>
-            Вес одной штуки = {fmt2((form.weightOverride||dishWeight(form,dishes)) / (form.category==="Роллы 8шт"?8:10))} г
+            Вес одной штуки = {fmt2((form.weightOverride||dishWeight(form,dishes)) / rollPcs(form.category))} г
           </div>
         </div>
         <div style={{marginLeft:"auto",textAlign:"right"}}>
           <div style={{fontSize:11,color:C.muted,textTransform:"uppercase",letterSpacing:"1px"}}>Себест. 1 шт</div>
           <div style={{fontWeight:800,fontSize:18,color:C.blue}}>
-            {fmt(dishCost(form,products,semis,dishes) / (form.category==="Роллы 8шт"?8:10))} ₸
+            {fmt(dishCost(form,products,semis,dishes) / rollPcs(form.category))} ₸
           </div>
         </div>
       </div>}
@@ -1494,7 +1505,7 @@ function DishesTab({state,dispatch}){
             {form.dishLines.map(r=>{
               const d=dishes.find(d=>d.id===r.dishId);if(!d)return null;
               const isRoll=isRollCat(d.category);
-              const stdPcs=d.category==="Роллы 8шт"?8:d.category==="Роллы 10шт"?10:null;
+              const stdPcs=rollPcs(d.category);
               const effectiveCost=isRoll&&r.pcs&&stdPcs
                 ?dishCost(d,products,semis,dishes)/stdPcs*r.pcs*r.qty
                 :dishCost(d,products,semis,dishes)*r.qty;
@@ -1633,7 +1644,7 @@ function DishesTab({state,dispatch}){
               Себест. 1 шт ({form.category==="Роллы 8шт"?"из 8":"из 10"})
             </div>
             <div style={{fontWeight:800,fontSize:18,color:C.green}}>
-              {fmt(formCost/(form.category==="Роллы 8шт"?8:10))} ₸
+              {fmt(formCost/rollPcs(form.category))} ₸
             </div>
           </div>}
           {isPizzaCat(form.category)&&<div>
