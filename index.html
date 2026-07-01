@@ -1153,6 +1153,8 @@ function DishesTab({state,dispatch}){
   const [pSearch,setPSearch]=useState(""); // поиск по названию продукта
   const [sRow,setSRow]=useState({semiId:"",qty:""});
   const [dRow,setDRow]=useState({dishId:"",qty:"",pcs:""});
+  const [dSearch,setDSearch]=useState(""); // поиск блюда для сета
+  const [dCatFilter,setDCatFilter]=useState("all"); // фильтр категории блюда для сета
   const [pkRow,setPkRow]=useState({productId:"",qty:""});
 
   const filtered=dishes.filter(d=>(catFilter==="all"||d.category===catFilter)&&(!search||d.name.toLowerCase().includes(search.toLowerCase())));
@@ -1429,15 +1431,36 @@ function DishesTab({state,dispatch}){
             placeholder="🔍 Поиск продукта…"
             style={{marginBottom:8,fontSize:13,padding:"8px 12px"}}/>
 
-          <Field label="Продукт"><select value={pRow.productId} onChange={e=>setPRow(r=>({...r,productId:e.target.value}))}>
-            <option value="">— выберите —</option>
-            {products
+          {/* Живой список продуктов — сразу видно совпадения */}
+          {(()=>{
+            const avail=products
               .filter(p=>p.category!=="Упаковка")
               .filter(p=>pCatFilter==="all"||p.category===pCatFilter)
               .filter(p=>!pSearch||p.name.toLowerCase().includes(pSearch.toLowerCase()))
-              .filter(p=>!form.productLines.find(l=>l.productId===p.id))
-              .map(p=><option key={p.id} value={p.id}>{p.name} — {p.category}</option>)}
-          </select></Field>
+              .filter(p=>!form.productLines.find(l=>l.productId===p.id));
+            return <div style={{maxHeight:180,overflowY:"auto",marginBottom:10,
+              border:`1px solid ${C.border}`,borderRadius:8,background:C.surface}}>
+              {avail.length===0
+                ?<div style={{padding:"14px",textAlign:"center",color:C.muted,fontSize:12}}>
+                  {pSearch?`Ничего не найдено по «${pSearch}»`:"Нет продуктов в этой категории"}
+                </div>
+                :avail.map(p=>(
+                  <button key={p.id} onClick={()=>setPRow(r=>({...r,productId:String(p.id)}))}
+                    style={{display:"flex",justifyContent:"space-between",alignItems:"center",
+                      width:"100%",textAlign:"left",padding:"9px 12px",
+                      background:+pRow.productId===p.id?`${C.green}22`:"transparent",
+                      border:"none",borderBottom:`1px solid ${C.border}`,
+                      color:C.text,fontSize:13,cursor:"pointer"}}>
+                    <span style={{fontWeight:+pRow.productId===p.id?700:500}}>
+                      {catIcon(p.category)} {p.name}
+                    </span>
+                    <span style={{fontSize:11,color:C.muted,flexShrink:0,marginLeft:8}}>
+                      {p.category}{+pRow.productId===p.id?"  ✓":""}
+                    </span>
+                  </button>
+                ))}
+            </div>;
+          })()}
           <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"flex-end"}}>
             <Field label="Брутто,г" style={{flex:1,minWidth:100}}><input type="number" value={pRow.brutto} onChange={e=>setPRow(r=>({...r,brutto:e.target.value}))}/></Field>
             <Field label="% потерь" style={{flex:1,minWidth:80}}><input type="number" value={pRow.loss} onChange={e=>setPRow(r=>({...r,loss:e.target.value}))}/></Field>
@@ -1541,25 +1564,71 @@ function DishesTab({state,dispatch}){
           </tbody>
         </table>}
         <div style={{background:C.card,borderRadius:10,padding:10,marginBottom:14}}>
-          <div style={{display:"grid",gridTemplateColumns:"2fr 1fr 1fr auto",gap:8,alignItems:"end"}}>
-            <Field label="Блюдо">
-              <select value={dRow.dishId} onChange={e=>setDRow(r=>({...r,dishId:e.target.value}))}>
-                <option value="">— выберите блюдо —</option>
-                {dishes.filter(d=>d.id!==editId&&!isSetCat(d.category)&&!form.dishLines.find(l=>l.dishId===d.id))
-                  .map(d=><option key={d.id} value={d.id}>{d.name} ({d.category})</option>)}
-              </select>
-            </Field>
+          <div style={{fontSize:12,color:C.muted,fontWeight:700,textTransform:"uppercase",marginBottom:8}}>Добавить блюдо в сет</div>
+
+          {/* Фильтр по категориям блюд */}
+          <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:8}}>
+            <button onClick={()=>setDCatFilter("all")} style={{
+              background:dCatFilter==="all"?C.green:C.surface,
+              color:dCatFilter==="all"?C.bg:C.muted,
+              border:`1px solid ${dCatFilter==="all"?C.green:C.border}`,
+              borderRadius:7,padding:"4px 10px",fontSize:11,fontWeight:700}}>Все</button>
+            {DISH_CATEGORIES.filter(c=>!isSetCat(c)).map(cat=>(
+              <button key={cat} onClick={()=>setDCatFilter(cat)} style={{
+                background:dCatFilter===cat?C.green:C.surface,
+                color:dCatFilter===cat?C.bg:C.muted,
+                border:`1px solid ${dCatFilter===cat?C.green:C.border}`,
+                borderRadius:7,padding:"4px 10px",fontSize:11,fontWeight:600}}>{cat}</button>
+            ))}
+          </div>
+
+          {/* Поиск блюда */}
+          <input value={dSearch} onChange={e=>setDSearch(e.target.value)}
+            placeholder="🔍 Поиск блюда…"
+            style={{marginBottom:8,fontSize:13,padding:"8px 12px"}}/>
+
+          {/* Живой список блюд */}
+          {(()=>{
+            const availDishes=dishes
+              .filter(d=>d.id!==editId&&!isSetCat(d.category))
+              .filter(d=>dCatFilter==="all"||d.category===dCatFilter)
+              .filter(d=>!dSearch||d.name.toLowerCase().includes(dSearch.toLowerCase()))
+              .filter(d=>!form.dishLines.find(l=>l.dishId===d.id));
+            return <div style={{maxHeight:200,overflowY:"auto",marginBottom:10,
+              border:`1px solid ${C.border}`,borderRadius:8,background:C.surface}}>
+              {availDishes.length===0
+                ?<div style={{padding:"14px",textAlign:"center",color:C.muted,fontSize:12}}>
+                  {dSearch?`Ничего не найдено по «${dSearch}»`:"Нет доступных блюд"}
+                </div>
+                :availDishes.map(d=>(
+                  <button key={d.id} onClick={()=>setDRow(r=>({...r,dishId:String(d.id)}))}
+                    style={{display:"flex",justifyContent:"space-between",alignItems:"center",
+                      width:"100%",textAlign:"left",padding:"9px 12px",
+                      background:+dRow.dishId===d.id?`${C.green}22`:"transparent",
+                      border:"none",borderBottom:`1px solid ${C.border}`,
+                      color:C.text,fontSize:13,cursor:"pointer"}}>
+                    <span style={{fontWeight:+dRow.dishId===d.id?700:500}}>{d.name}</span>
+                    <span style={{fontSize:11,color:C.muted,flexShrink:0,marginLeft:8}}>
+                      {d.category}{isRollCat(d.category)?` · ${rollPcs(d.category)}шт`:""}{+dRow.dishId===d.id?"  ✓":""}
+                    </span>
+                  </button>
+                ))}
+            </div>;
+          })()}
+
+          {/* Порций + штук + добавить */}
+          <div style={{display:"grid",gridTemplateColumns:dRow.dishId&&isRollCat(dishes.find(d=>d.id===+dRow.dishId)?.category)?"1fr 1fr auto":"1fr auto",gap:8,alignItems:"end"}}>
             <Field label="Порций"><input type="number" value={dRow.qty} onChange={e=>setDRow(r=>({...r,qty:e.target.value}))} placeholder="1" min="1"/></Field>
             {(()=>{const d=dishes.find(d=>d.id===+dRow.dishId);return isRollCat(d?.category)&&(
-              <Field label="Штук в сете" hint="стандарт или другое">
+              <Field label="Штук в сете" hint="по умолч. стандарт">
                 <input type="number" value={dRow.pcs}
                   onChange={e=>setDRow(r=>({...r,pcs:e.target.value}))}
-                  placeholder={d?.category==="Роллы 8шт"?"8":"10"}
+                  placeholder={String(rollPcs(d?.category)||8)}
                   style={{border:`1px solid ${C.green}55`,background:C.greenSoft,color:C.green}}
                   min="1"/>
               </Field>
             );})()}
-            <div style={{paddingBottom:14}}><Btn size="sm" onClick={addDRow}>+</Btn></div>
+            <div style={{paddingBottom:14}}><Btn size="sm" onClick={addDRow} disabled={!dRow.dishId||!dRow.qty}>+ Добавить</Btn></div>
           </div>
         </div>
 
