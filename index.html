@@ -1472,7 +1472,7 @@ function DishesTab({state,dispatch}){
                     onChange={e=>updatePRow(r.productId,"brutto",e.target.value)}
                     style={{width:72,padding:"5px 8px",fontSize:13,borderRadius:8,
                       background:C.surface,border:`1px solid ${C.border}`,color:C.text}}/>
-                  <span style={{fontSize:12,color:C.muted}}>г</span>
+                  <span style={{fontSize:12,color:C.muted}}>{p.unit}</span>
                 </div>
                 <div style={{display:"flex",alignItems:"center",gap:4}}>
                   <span style={{fontSize:11,color:C.muted}}>Потери %</span>
@@ -1482,7 +1482,7 @@ function DishesTab({state,dispatch}){
                       background:C.surface,border:`1px solid ${C.border}`,color:C.text}}/>
                 </div>
                 <div style={{marginLeft:"auto",display:"flex",gap:12}}>
-                  <span style={{fontSize:12,color:C.green,fontWeight:700}}>→ {fmt2(n)} г</span>
+                  <span style={{fontSize:12,color:C.green,fontWeight:700}}>→ {fmt2(n)} {p.unit}</span>
                   <span style={{fontSize:12,color:C.blue,fontWeight:700}}>{fmt(productUnitCost(p)*n)} ₸</span>
                 </div>
               </div>
@@ -1544,7 +1544,14 @@ function DishesTab({state,dispatch}){
             </div>;
           })()}
           <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"flex-end"}}>
-            <Field label="Брутто,г" style={{flex:1,minWidth:100}}><input type="number" value={pRow.brutto} onChange={e=>setPRow(r=>({...r,brutto:e.target.value}))}/></Field>
+            {(()=>{
+              const selP=products.find(p=>p.id===+pRow.productId);
+              const u=selP?selP.unit:"г";
+              return <Field label={`Брутто, ${u}`} style={{flex:1,minWidth:100}}>
+                <input type="number" value={pRow.brutto} onChange={e=>setPRow(r=>({...r,brutto:e.target.value}))}
+                  placeholder={u==="шт"?"1":"100"}/>
+              </Field>;
+            })()}
             <Field label="% потерь" style={{flex:1,minWidth:80}}><input type="number" value={pRow.loss} onChange={e=>setPRow(r=>({...r,loss:e.target.value}))}/></Field>
             <div style={{paddingBottom:14}}><Btn onClick={addPRow} disabled={!pRow.productId||!pRow.brutto}>+ Добавить</Btn></div>
           </div>
