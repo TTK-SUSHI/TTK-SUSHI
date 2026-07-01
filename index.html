@@ -582,7 +582,20 @@ function ProductsTab({state,dispatch}){
       </div>
     </div>
 
-    <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Поиск…" style={{maxWidth:280,margin:"16px 0 12px"}}/>
+    <div style={{display:"flex",gap:10,alignItems:"center",flexWrap:"wrap",margin:"16px 0 12px"}}>
+      <div style={{position:"relative",flex:1,maxWidth:320,minWidth:200}}>
+        <span style={{position:"absolute",left:12,top:"50%",transform:"translateY(-50%)",fontSize:15,pointerEvents:"none"}}>🔍</span>
+        <input value={search} onChange={e=>setSearch(e.target.value)}
+          placeholder="Поиск продукта по названию…"
+          style={{width:"100%",padding:"10px 12px 10px 38px",fontSize:14}}/>
+        {search&&<button onClick={()=>setSearch("")} style={{position:"absolute",right:8,top:"50%",
+          transform:"translateY(-50%)",background:"none",border:"none",color:C.muted,fontSize:18,
+          cursor:"pointer",padding:4}}>×</button>}
+      </div>
+      <span style={{fontSize:13,color:C.muted,fontWeight:600}}>
+        Найдено: <span style={{color:C.green}}>{filtered.length}</span> из {products.length}
+      </span>
+    </div>
     <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:16}}>
       <button onClick={()=>setCatFilter("all")}
         style={{background:catFilter==="all"?C.accent:C.card,color:catFilter==="all"?"#08090f":C.muted,
@@ -819,6 +832,8 @@ function SemisTab({state,dispatch}){
   const [form,setForm]=useState(emptyForm);
   const [pRow,setPRow]=useState({productId:"",qty:""});
   const [sRow,setSRow]=useState({semiId:"",qty:""});
+  const [spSearch,setSpSearch]=useState(""); // поиск продукта в полуфабрикате
+  const [spCatFilter,setSpCatFilter]=useState("all"); // фильтр категории продукта
 
   const filtered=semis.filter(s=>s.name.toLowerCase().includes(search.toLowerCase()));
 
@@ -883,7 +898,20 @@ function SemisTab({state,dispatch}){
       </div>
       <Btn onClick={openAdd}>+ Новый полуфабрикат</Btn>
     </div>
-    <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Поиск…" style={{maxWidth:280,margin:"16px 0"}}/>
+    <div style={{display:"flex",gap:10,alignItems:"center",flexWrap:"wrap",margin:"16px 0"}}>
+      <div style={{position:"relative",flex:1,maxWidth:320,minWidth:200}}>
+        <span style={{position:"absolute",left:12,top:"50%",transform:"translateY(-50%)",fontSize:15,pointerEvents:"none"}}>🔍</span>
+        <input value={search} onChange={e=>setSearch(e.target.value)}
+          placeholder="Поиск полуфабриката…"
+          style={{width:"100%",padding:"10px 12px 10px 38px",fontSize:14}}/>
+        {search&&<button onClick={()=>setSearch("")} style={{position:"absolute",right:8,top:"50%",
+          transform:"translateY(-50%)",background:"none",border:"none",color:C.muted,fontSize:18,
+          cursor:"pointer",padding:4}}>×</button>}
+      </div>
+      <span style={{fontSize:13,color:C.muted,fontWeight:600}}>
+        Найдено: <span style={{color:C.green}}>{filtered.length}</span> из {semis.length}
+      </span>
+    </div>
 
     {/* ── Карточки ── */}
     <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(310px,1fr))",gap:12}}>
@@ -1012,13 +1040,53 @@ function SemisTab({state,dispatch}){
       {/* Добавить продукт */}
       <div style={{background:C.card,borderRadius:10,padding:12,marginBottom:14}}>
         <div style={{fontSize:12,color:C.muted,fontWeight:700,textTransform:"uppercase",marginBottom:8}}>Добавить продукт</div>
-        <Field label="Продукт">
-          <select value={pRow.productId} onChange={e=>setPRow(r=>({...r,productId:e.target.value}))}>
-            <option value="">— выберите —</option>
-            {products.filter(p=>!form.composition.find(c=>c.productId===p.id)).map(p=>
-              <option key={p.id} value={p.id}>{p.name} ({p.unit})</option>)}
-          </select>
-        </Field>
+
+        {/* Фильтр категорий */}
+        <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:8}}>
+          <button onClick={()=>setSpCatFilter("all")} style={{
+            background:spCatFilter==="all"?C.green:C.surface,color:spCatFilter==="all"?C.bg:C.muted,
+            border:`1px solid ${spCatFilter==="all"?C.green:C.border}`,
+            borderRadius:7,padding:"4px 10px",fontSize:11,fontWeight:700}}>Все</button>
+          {PRODUCT_CATEGORIES.map(cat=>(
+            <button key={cat} onClick={()=>setSpCatFilter(cat)} style={{
+              background:spCatFilter===cat?C.green:C.surface,color:spCatFilter===cat?C.bg:C.muted,
+              border:`1px solid ${spCatFilter===cat?C.green:C.border}`,
+              borderRadius:7,padding:"4px 10px",fontSize:11,fontWeight:600}}>{cat}</button>
+          ))}
+        </div>
+
+        {/* Поиск */}
+        <input value={spSearch} onChange={e=>setSpSearch(e.target.value)}
+          placeholder="🔍 Поиск продукта…" style={{marginBottom:8,fontSize:13,padding:"8px 12px"}}/>
+
+        {/* Живой список */}
+        {(()=>{
+          const avail=products
+            .filter(p=>spCatFilter==="all"||p.category===spCatFilter)
+            .filter(p=>!spSearch||p.name.toLowerCase().includes(spSearch.toLowerCase()))
+            .filter(p=>!form.composition.find(c=>c.productId===p.id));
+          return <div style={{maxHeight:170,overflowY:"auto",marginBottom:10,
+            border:`1px solid ${C.border}`,borderRadius:8,background:C.surface}}>
+            {avail.length===0
+              ?<div style={{padding:"14px",textAlign:"center",color:C.muted,fontSize:12}}>
+                {spSearch?`Ничего не найдено по «${spSearch}»`:"Нет продуктов"}
+              </div>
+              :avail.map(p=>(
+                <button key={p.id} onClick={()=>setPRow(r=>({...r,productId:String(p.id)}))}
+                  style={{display:"flex",justifyContent:"space-between",alignItems:"center",
+                    width:"100%",textAlign:"left",padding:"9px 12px",
+                    background:+pRow.productId===p.id?`${C.green}22`:"transparent",
+                    border:"none",borderBottom:`1px solid ${C.border}`,
+                    color:C.text,fontSize:13,cursor:"pointer"}}>
+                  <span style={{fontWeight:+pRow.productId===p.id?700:500}}>{catIcon(p.category)} {p.name}</span>
+                  <span style={{fontSize:11,color:C.muted,flexShrink:0,marginLeft:8}}>
+                    {p.unit}{+pRow.productId===p.id?"  ✓":""}
+                  </span>
+                </button>
+              ))}
+          </div>;
+        })()}
+
         <div style={{display:"flex",gap:8,alignItems:"flex-end"}}>
           <Field label="Количество" style={{flex:1}}>
             <input type="number" value={pRow.qty} min="0"
@@ -1228,8 +1296,22 @@ function DishesTab({state,dispatch}){
       <Btn onClick={openAdd}>+ Новое блюдо</Btn>
     </div>
 
-    <div style={{display:"flex",gap:8,flexWrap:"wrap",margin:"16px 0"}}>
-      <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Поиск блюда…" style={{maxWidth:220}}/>
+    <div style={{display:"flex",gap:10,alignItems:"center",flexWrap:"wrap",margin:"16px 0 10px"}}>
+      <div style={{position:"relative",flex:1,maxWidth:320,minWidth:200}}>
+        <span style={{position:"absolute",left:12,top:"50%",transform:"translateY(-50%)",fontSize:15,pointerEvents:"none"}}>🔍</span>
+        <input value={search} onChange={e=>setSearch(e.target.value)}
+          placeholder="Поиск блюда по названию…"
+          style={{width:"100%",padding:"10px 12px 10px 38px",fontSize:14}}/>
+        {search&&<button onClick={()=>setSearch("")} style={{position:"absolute",right:8,top:"50%",
+          transform:"translateY(-50%)",background:"none",border:"none",color:C.muted,fontSize:18,
+          cursor:"pointer",padding:4}}>×</button>}
+      </div>
+      <span style={{fontSize:13,color:C.muted,fontWeight:600}}>
+        Найдено: <span style={{color:C.green}}>{filtered.length}</span> из {dishes.length}
+      </span>
+    </div>
+
+    <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:16}}>
       <button onClick={()=>setCatFilter("all")}
         style={{background:catFilter==="all"?C.accent:C.card,color:catFilter==="all"?"#fff":C.muted,
           border:`1px solid ${C.border}`,borderRadius:8,padding:"6px 14px",fontSize:13,fontWeight:600}}>Все категории</button>
