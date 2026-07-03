@@ -83,7 +83,7 @@ const markupPct=(cost,price)=>price?Math.round(((price-cost)/price)*100):0;
 
 // ════════════════════ ДАННЫЕ ════════════════════
 const NOW=Date.now();
-const DISH_CATEGORIES=["Комбо","Сеты","Суши","Классические роллы","Жареные роллы","Запечённые роллы","Сложные роллы","Роллы 8шт","Роллы 10шт","Пицца 25см","Пицца 30см","Бургеры","Вок","Закуски","Напитки"];
+const DISH_CATEGORIES=["Комбо","Сеты","Суши","Классические роллы","Жареные роллы","Запечённые роллы","Сложные роллы","Роллы 8шт","Роллы 10шт","Пицца 25см","Пицца 30см","Бургеры","Донеры","Вок","Закуски","Напитки"];
 const PRODUCT_CATEGORIES=["Рыба","Мясо","Овощи","Сыры","Соуса","Специи","Масла","Упаковка","Другое"];
 // Иконка по категории продукта
 const CATEGORY_ICONS={
@@ -828,7 +828,7 @@ function SemisTab({state,dispatch}){
   const [showForm,setShowForm]=useState(false);
   const [editId,setEditId]=useState(null);
 
-  const emptyForm={name:"",outputUnit:"г",outputQtyOverride:"",composition:[],semiLines:[]};
+  const emptyForm={name:"",outputUnit:"г",outputQtyOverride:"",pieceWeight:"",composition:[],semiLines:[]};
   const [form,setForm]=useState(emptyForm);
   const [pRow,setPRow]=useState({productId:"",qty:""});
   const [sRow,setSRow]=useState({semiId:"",qty:""});
@@ -853,6 +853,7 @@ function SemisTab({state,dispatch}){
   function openEdit(s){
     setForm({name:s.name,outputUnit:s.outputUnit,
       outputQtyOverride:s.outputQtyOverride?String(s.outputQtyOverride):"",
+      pieceWeight:s.pieceWeight?String(s.pieceWeight):"",
       composition:(s.composition||[]).map(c=>({...c})),
       semiLines:(s.semiLines||[]).map(r=>({...r}))});
     setEditId(s.id);setPRow({productId:"",qty:""});setSRow({semiId:"",qty:""});setShowForm(true);
@@ -870,7 +871,7 @@ function SemisTab({state,dispatch}){
 
   function save(){
     if(!form.name||(form.composition.length===0&&form.semiLines.length===0))return;
-    const item={...form,id:editId||uid(),outputQtyOverride:form.outputQtyOverride?+form.outputQtyOverride:null};
+    const item={...form,id:editId||uid(),outputQtyOverride:form.outputQtyOverride?+form.outputQtyOverride:null,pieceWeight:form.pieceWeight?+form.pieceWeight:null};
     if(editId)dispatch({type:"UPD_SEMI",v:item});
     else dispatch({type:"ADD_SEMI",v:item});
     setShowForm(false);
@@ -1192,6 +1193,31 @@ function SemisTab({state,dispatch}){
               style={{background:"none",color:C.accent,fontSize:12,fontWeight:700}}>× сбросить</button>}
           </div>
         </div>
+
+        {/* Вес одной штуки — для штучных полуфабрикатов */}
+        <div style={{background:`${C.teal}12`,border:`1px solid ${C.teal}44`,borderRadius:8,padding:10,marginBottom:14}}>
+          <div style={{fontSize:12,color:C.teal,fontWeight:700,marginBottom:6}}>
+            🍗 Вес одной штуки (для штучных: крылья, наггетсы)
+          </div>
+          <div style={{fontSize:12,color:C.muted,marginBottom:8,lineHeight:1.5}}>
+            Если заполнить — при добавлении в блюдо можно указывать количество в штуках,
+            программа сама пересчитает в граммы. Оставьте пустым для обычных полуфабрикатов.
+          </div>
+          <div style={{display:"flex",gap:10,alignItems:"center"}}>
+            <input type="number" value={form.pieceWeight} min="0"
+              onChange={e=>setForm(f=>({...f,pieceWeight:e.target.value}))}
+              placeholder="напр. 48"
+              style={{maxWidth:130,border:`1px solid ${C.teal}55`}}/>
+            <span style={{color:C.muted,fontSize:13}}>г/шт</span>
+            {form.pieceWeight&&<>
+              <span style={{color:C.teal,fontSize:12,fontWeight:600}}>
+                = {form.outputQtyOverride||formInputQty?Math.round((+(form.outputQtyOverride||formInputQty))/+form.pieceWeight):0} шт в партии
+              </span>
+              <button onClick={()=>setForm(f=>({...f,pieceWeight:""}))}
+                style={{background:"none",color:C.accent,fontSize:12,fontWeight:700}}>× сбросить</button>
+            </>}
+          </div>
+        </div>
       </>}
 
       <div style={{display:"flex",gap:8}}>
@@ -1245,7 +1271,24 @@ function DishesTab({state,dispatch}){
   function addSRow(){if(!sRow.semiId||!sRow.qty)return;
     setForm(f=>({...f,semiLines:[...f.semiLines,{semiId:+sRow.semiId,qty:+sRow.qty}]}));
     setSRow({semiId:"",qty:""});}
+  // Умное добавление: для штучных п/ф конвертируем штуки в граммы
+  function addSRowSmart(){
+    if(!sRow.semiId||!sRow.qty)return;
+    const selS=semis.find(s=>s.id===+sRow.semiId);
+    const qtyGrams=selS&&selS.pieceWeight
+      ? +sRow.qty * selS.pieceWeight   // штуки × вес штуки = граммы
+      : +sRow.qty;                      // обычный п/ф — как есть
+    const pcs=selS&&selS.pieceWeight?+sRow.qty:null;
+    setForm(f=>({...f,semiLines:[...f.semiLines,{semiId:+sRow.semiId,qty:qtyGrams,...(pcs?{pcs}:{})}]}));
+    setSRow({semiId:"",qty:""});
+  }
   function updateSRow(semiId,val){setForm(f=>({...f,semiLines:f.semiLines.map(l=>l.semiId===semiId?{...l,qty:+val}:l)}));}
+  // Обновление штучного п/ф — пересчёт из штук в граммы
+  function updateSRowPcs(semiId,pcsVal){
+    const s=semis.find(s=>s.id===semiId);
+    if(!s||!s.pieceWeight)return;
+    setForm(f=>({...f,semiLines:f.semiLines.map(l=>l.semiId===semiId?{...l,qty:+pcsVal*s.pieceWeight,pcs:+pcsVal}:l)}));
+  }
   function removeSRow(semiId){setForm(f=>({...f,semiLines:f.semiLines.filter(l=>l.semiId!==semiId)}));}
 
   function addDRow(){
@@ -1573,11 +1616,22 @@ function DishesTab({state,dispatch}){
                   fontSize:12,fontWeight:700,cursor:"pointer",flexShrink:0,whiteSpace:"nowrap"}}>× Удалить</button>
               </div>
               <div style={{display:"flex",alignItems:"center",gap:8}}>
-                <input type="number" value={r.qty} min="0"
-                  onChange={e=>updateSRow(r.semiId,e.target.value)}
-                  style={{width:90,padding:"5px 10px",fontSize:13,borderRadius:8,
-                    background:C.surface,border:`1px solid ${C.purple}55`,color:C.text}}/>
-                <span style={{color:C.muted,fontSize:12}}>{s.outputUnit}</span>
+                {s.pieceWeight
+                  ?<>
+                    <input type="number" value={r.pcs||Math.round(r.qty/s.pieceWeight)} min="0"
+                      onChange={e=>updateSRowPcs(r.semiId,e.target.value)}
+                      style={{width:70,padding:"5px 10px",fontSize:13,borderRadius:8,
+                        background:`${C.teal}10`,border:`1px solid ${C.teal}55`,color:C.text}}/>
+                    <span style={{color:C.teal,fontSize:12,fontWeight:600}}>шт</span>
+                    <span style={{color:C.muted,fontSize:11}}>= {fmt2(r.qty)} г</span>
+                  </>
+                  :<>
+                    <input type="number" value={r.qty} min="0"
+                      onChange={e=>updateSRow(r.semiId,e.target.value)}
+                      style={{width:90,padding:"5px 10px",fontSize:13,borderRadius:8,
+                        background:C.surface,border:`1px solid ${C.purple}55`,color:C.text}}/>
+                    <span style={{color:C.muted,fontSize:12}}>{s.outputUnit}</span>
+                  </>}
                 <span style={{marginLeft:"auto",color:C.blue,fontWeight:700,fontSize:13}}>{fmt(semiCostPerUnit(s,products,semis)*r.qty)} ₸</span>
               </div>
             </div>;
@@ -1590,8 +1644,23 @@ function DishesTab({state,dispatch}){
             {semis.filter(s=>!form.semiLines.find(l=>l.semiId===s.id)).map(s=><option key={s.id} value={s.id}>{s.name}</option>)}
           </select></Field>
           <div style={{display:"flex",gap:8,alignItems:"flex-end"}}>
-            <Field label="Кол-во" style={{flex:1}}><input type="number" value={sRow.qty} onChange={e=>setSRow(r=>({...r,qty:e.target.value}))} placeholder="130"/></Field>
-            <div style={{paddingBottom:14}}><Btn onClick={addSRow} disabled={!sRow.semiId||!sRow.qty} variant="purple">+ Добавить</Btn></div>
+            {(()=>{
+              const selS=semis.find(s=>s.id===+sRow.semiId);
+              const hasPcs=selS&&selS.pieceWeight;
+              if(hasPcs){
+                // Штучный полуфабрикат — вводим штуки
+                return <Field label="Количество, шт" hint={`1 шт = ${selS.pieceWeight} г`} style={{flex:1}}>
+                  <input type="number" value={sRow.qty}
+                    onChange={e=>setSRow(r=>({...r,qty:e.target.value}))}
+                    placeholder="6"
+                    style={{border:`1px solid ${C.teal}55`,background:`${C.teal}10`}}/>
+                </Field>;
+              }
+              return <Field label="Кол-во" style={{flex:1}}>
+                <input type="number" value={sRow.qty} onChange={e=>setSRow(r=>({...r,qty:e.target.value}))} placeholder="130"/>
+              </Field>;
+            })()}
+            <div style={{paddingBottom:14}}><Btn onClick={addSRowSmart} disabled={!sRow.semiId||!sRow.qty} variant="purple">+ Добавить</Btn></div>
           </div>
         </div>
       </>}
@@ -2221,9 +2290,10 @@ function App(){
       id,name,unit,priceFor,category,
       priceHistory: priceHistory?.length ? [priceHistory[priceHistory.length-1]] : []
     }));
-    const semis = state.semis.map(({id,name,outputUnit,outputQtyOverride,composition,semiLines})=>({
+    const semis = state.semis.map(({id,name,outputUnit,outputQtyOverride,pieceWeight,composition,semiLines})=>({
       id,name,outputUnit,
       ...(outputQtyOverride?{outputQtyOverride}:{}),
+      ...(pieceWeight?{pieceWeight}:{}),
       composition:composition||[],
       semiLines:semiLines||[]
     }));
