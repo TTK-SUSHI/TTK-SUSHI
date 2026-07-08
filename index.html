@@ -527,7 +527,7 @@ function ProductsTab({state,dispatch}){
   const [buyTotal,setBuyTotal]=useState(""); // сколько заплатил
   const [buyQty,setBuyQty]=useState(""); // сколько купил (в кг/л/шт)
   const [confirmDel,setConfirmDel]=useState(null); // {id, name}
-  const empty={name:"",unit:"г",priceFor:"кг",category:PRODUCT_CATEGORIES[0]};
+  const empty={name:"",unit:"г",priceFor:"кг",category:PRODUCT_CATEGORIES[0],pieceWeight:""};
   const [form,setForm]=useState(empty);
 
   // ── ИИ ИМПОРТ — заменён на инструкцию по Claude ──
@@ -539,11 +539,12 @@ function ProductsTab({state,dispatch}){
   );
 
   function openAdd(){setForm(empty);setEditId(null);setShowForm(true);}
-  function openEdit(p){setForm({name:p.name,unit:p.unit,priceFor:p.priceFor,category:p.category||PRODUCT_CATEGORIES[0]});setEditId(p.id);setShowForm(true);}
+  function openEdit(p){setForm({name:p.name,unit:p.unit,priceFor:p.priceFor,category:p.category||PRODUCT_CATEGORIES[0],pieceWeight:p.pieceWeight?String(p.pieceWeight):""});setEditId(p.id);setShowForm(true);}
   function save(){
     if(!form.name)return;
-    if(editId)dispatch({type:"UPD_PRODUCT",id:editId,patch:form});
-    else dispatch({type:"ADD_PRODUCT",v:{...form,id:uid(),priceHistory:[]}});
+    const patch={...form,pieceWeight:form.pieceWeight?+form.pieceWeight:null};
+    if(editId)dispatch({type:"UPD_PRODUCT",id:editId,patch});
+    else dispatch({type:"ADD_PRODUCT",v:{...patch,id:uid(),priceHistory:[]}});
     setShowForm(false);
   }
   function del(id){
@@ -713,7 +714,28 @@ function ProductsTab({state,dispatch}){
           </select>
         </Field>
       </div>
-      <div style={{display:"flex",gap:8,marginTop:4}}>
+
+      {/* Вес одной штуки — штучный учёт */}
+      <div style={{background:`${C.teal}12`,border:`1px solid ${C.teal}44`,borderRadius:8,padding:10,marginTop:12}}>
+        <div style={{fontSize:12,color:C.teal,fontWeight:700,marginBottom:6}}>
+          🍞 Вес одной штуки (необязательно)
+        </div>
+        <div style={{fontSize:11,color:C.muted,marginBottom:8,lineHeight:1.5}}>
+          Для продуктов которые закупаете в кг, но в блюде удобно считать штуками
+          (хлеб, пластинки сыра, порционные соусы). Приход в кг → в блюде выбираете штуки.
+        </div>
+        <div style={{display:"flex",gap:10,alignItems:"center"}}>
+          <input type="number" value={form.pieceWeight} min="0"
+            onChange={e=>setForm(f=>({...f,pieceWeight:e.target.value}))}
+            placeholder="напр. 47"
+            style={{maxWidth:130,border:`1px solid ${C.teal}55`}}/>
+          <span style={{color:C.muted,fontSize:13}}>г/шт</span>
+          {form.pieceWeight&&<button onClick={()=>setForm(f=>({...f,pieceWeight:""}))}
+            style={{background:"none",color:C.accent,fontSize:12,fontWeight:700}}>× сбросить</button>}
+        </div>
+      </div>
+
+      <div style={{display:"flex",gap:8,marginTop:14}}>
         <Btn onClick={save} style={{flex:1}}>{editId?"Сохранить":"Создать"}</Btn>
         <Btn variant="outline" onClick={()=>setShowForm(false)}>Отмена</Btn>
       </div>
@@ -1247,12 +1269,36 @@ function DishesTab({state,dispatch}){
   const [pSearch,setPSearch]=useState(""); // поиск по названию продукта
   const [sRow,setSRow]=useState({semiId:"",qty:""});
   const [dRow,setDRow]=useState({dishId:"",qty:"",pcs:""});
+  const [targetFC,setTargetFC]=useState(""); // целевой фудкост для авторасчёта цены
+  const [showPricing,setShowPricing]=useState(false); // модал массового ценообразования
+  const [bulkCat,setBulkCat]=useState("all"); // категория для массового пересчёта
+  const [bulkFC,setBulkFC]=useState(""); // фудкост для массового пересчёта
   const [dSearch,setDSearch]=useState(""); // поиск блюда для сета
   const [dCatFilter,setDCatFilter]=useState("all"); // фильтр категории блюда для сета
   const [pkRow,setPkRow]=useState({productId:"",qty:""});
 
   const filtered=dishes.filter(d=>(catFilter==="all"||d.category===catFilter)&&(!search||d.name.toLowerCase().includes(search.toLowerCase())));
   const grouped=DISH_CATEGORIES.map(cat=>({cat,items:filtered.filter(d=>d.category===cat)})).filter(g=>g.items.length);
+
+  // Массовый пересчёт цен по фудкосту
+  function applyBulkPricing(){
+    if(!bulkFC||+bulkFC<=0||+bulkFC>=100)return;
+    const fc=+bulkFC/100;
+    dishes.forEach(d=>{
+      if(bulkCat!=="all"&&d.category!==bulkCat)return;
+      const cost=dishCost(d,products,semis,dishes);
+      if(cost<=0)return; // пропускаем блюда без себестоимости
+      const newPrice=Math.round(cost/fc/10)*10;
+      dispatch({type:"UPD_DISH",v:{...d,price:newPrice}});
+    });
+    setShowPricing(false);
+    setBulkFC("");setBulkCat("all");
+  }
+  // Сколько блюд затронет пересчёт
+  const bulkAffected=dishes.filter(d=>{
+    if(bulkCat!=="all"&&d.category!==bulkCat)return false;
+    return dishCost(d,products,semis,dishes)>0;
+  }).length;
 
   function openAdd(){setForm(empty);setEditId(null);setShowForm(true);}
   function openEdit(d){setForm({name:d.name,category:d.category,price:String(d.price),
@@ -1263,10 +1309,46 @@ function DishesTab({state,dispatch}){
     packLines:(d.packLines||[]).map(l=>({...l}))});setEditId(d.id);setShowForm(true);}
 
   function addPRow(){if(!pRow.productId||!pRow.brutto)return;
-    setForm(f=>({...f,productLines:[...f.productLines,{productId:+pRow.productId,brutto:+pRow.brutto,loss:+pRow.loss||0}]}));
+    const selP=products.find(p=>p.id===+pRow.productId);
+    // Штучный продукт: введённое число — штуки, конвертируем в граммы (брутто)
+    const brutto=selP&&selP.pieceWeight?+pRow.brutto*selP.pieceWeight:+pRow.brutto;
+    const pcs=selP&&selP.pieceWeight?+pRow.brutto:null;
+    setForm(f=>({...f,productLines:[...f.productLines,{productId:+pRow.productId,brutto,loss:+pRow.loss||0,...(pcs?{pcs}:{})}]}));
     setPRow({productId:"",brutto:"",loss:""});}
   function updatePRow(productId,field,val){setForm(f=>({...f,productLines:f.productLines.map(l=>l.productId===productId?{...l,[field]:+val}:l)}));}
+  // Обновление штучного продукта — пересчёт штук в брутто
+  function updatePRowPcs(productId,pcsVal){
+    const p=products.find(p=>p.id===productId);
+    if(!p||!p.pieceWeight)return;
+    setForm(f=>({...f,productLines:f.productLines.map(l=>l.productId===productId?{...l,brutto:+pcsVal*p.pieceWeight,pcs:+pcsVal}:l)}));
+  }
   function removePRow(productId){setForm(f=>({...f,productLines:f.productLines.filter(l=>l.productId!==productId)}));}
+
+  // Быстрое добавление базового набора ингредиентов
+  // ID: Нори=3, Моцарелла=14, Рис готовый(п/ф)=1, Тесто(п/ф)=1783000000010
+  function addBase(type){
+    const bases={
+      rollOpen:  {products:[{productId:3,brutto:0.5,loss:0}], semis:[{semiId:1,qty:160}]},
+      rollClosed:{products:[{productId:3,brutto:1,loss:0}],   semis:[{semiId:1,qty:120}]},
+      pizza25:   {products:[{productId:14,brutto:100,loss:0}], semis:[{semiId:1783000000010,qty:250}]},
+      pizza30:   {products:[{productId:14,brutto:150,loss:0}], semis:[{semiId:1783000000010,qty:280}]},
+    };
+    const base=bases[type];
+    if(!base)return;
+    setForm(f=>{
+      // Добавляем продукты (не дублируя уже существующие)
+      const newProds=[...f.productLines];
+      base.products.forEach(bp=>{
+        if(!newProds.find(l=>l.productId===bp.productId)) newProds.push({...bp});
+      });
+      // Добавляем полуфабрикаты
+      const newSemis=[...f.semiLines];
+      base.semis.forEach(bs=>{
+        if(!newSemis.find(l=>l.semiId===bs.semiId)) newSemis.push({...bs});
+      });
+      return {...f,productLines:newProds,semiLines:newSemis};
+    });
+  }
 
   function addSRow(){if(!sRow.semiId||!sRow.qty)return;
     setForm(f=>({...f,semiLines:[...f.semiLines,{semiId:+sRow.semiId,qty:+sRow.qty}]}));
@@ -1336,7 +1418,10 @@ function DishesTab({state,dispatch}){
         <h2 style={{fontFamily:"'Playfair Display',serif",fontSize:22,fontWeight:700,color:C.text}}>Готовые блюда на продажу</h2>
         <p style={{color:C.muted,fontSize:13,marginTop:4,letterSpacing:".2px"}}>Состав из продуктов и/или полуфабрикатов</p>
       </div>
-      <Btn onClick={openAdd}>+ Новое блюдо</Btn>
+      <div style={{display:"flex",gap:8}}>
+        <Btn variant="outline" onClick={()=>setShowPricing(true)}>🎯 Ценообразование</Btn>
+        <Btn onClick={openAdd}>+ Новое блюдо</Btn>
+      </div>
     </div>
 
     <div style={{display:"flex",gap:10,alignItems:"center",flexWrap:"wrap",margin:"16px 0 10px"}}>
@@ -1364,6 +1449,58 @@ function DishesTab({state,dispatch}){
     </div>
 
     {!grouped.length&&<Card><p style={{color:C.muted,textAlign:"center",padding:24}}>Блюд не найдено</p></Card>}
+
+    {/* ══ МОДАЛ: Массовое ценообразование ══ */}
+    {showPricing&&<Modal title="🎯 Ценообразование по фудкосту" onClose={()=>setShowPricing(false)} width={460}>
+      <div style={{background:`${C.teal}12`,border:`1px solid ${C.teal}44`,borderRadius:10,
+        padding:"12px 14px",fontSize:13,color:C.teal,marginBottom:16,lineHeight:1.5}}>
+        Задай желаемый фудкост — программа рассчитает цены продажи от себестоимости каждого блюда.
+        Формула: Цена = Себестоимость ÷ Фудкост%. Округление до 10 ₸.
+      </div>
+
+      <Field label="Категория блюд">
+        <select value={bulkCat} onChange={e=>setBulkCat(e.target.value)}>
+          <option value="all">Все категории</option>
+          {DISH_CATEGORIES.map(c=><option key={c} value={c}>{c}</option>)}
+        </select>
+      </Field>
+
+      <Field label="Желаемый фудкост, %" hint="обычно 25-35%">
+        <input type="number" value={bulkFC} onChange={e=>setBulkFC(e.target.value)}
+          placeholder="30" min="1" max="99" autoFocus/>
+      </Field>
+
+      <div style={{display:"flex",gap:6,marginBottom:16,flexWrap:"wrap"}}>
+        {[25,30,35,40].map(fc=>(
+          <button key={fc} onClick={()=>setBulkFC(String(fc))}
+            style={{background:bulkFC===String(fc)?C.teal:C.surface,
+              color:bulkFC===String(fc)?C.bg:C.muted,
+              border:`1px solid ${C.border}`,borderRadius:6,padding:"5px 12px",
+              fontSize:12,fontWeight:600,cursor:"pointer"}}>{fc}%</button>
+        ))}
+      </div>
+
+      {bulkFC&&+bulkFC>0&&+bulkFC<100&&<div style={{
+        background:C.card,borderRadius:10,padding:12,marginBottom:16}}>
+        <div style={{fontSize:12,color:C.muted,marginBottom:6}}>Затронет блюд: <b style={{color:C.green}}>{bulkAffected}</b></div>
+        <div style={{fontSize:12,color:C.muted}}>
+          Пример: себестоимость 300 ₸ → цена <b style={{color:C.green}}>{fmt(Math.round(300/(+bulkFC/100)/10)*10)} ₸</b>
+        </div>
+      </div>}
+
+      <div style={{background:C.yellowSoft,border:`1px solid ${C.yellow}`,borderRadius:8,
+        padding:10,marginBottom:14,fontSize:12,color:C.yellow}}>
+        ⚠️ Цены всех выбранных блюд будут перезаписаны. Блюда без себестоимости пропускаются.
+      </div>
+
+      <div style={{display:"flex",gap:8}}>
+        <Btn onClick={applyBulkPricing} variant="purple" style={{flex:1}}
+          disabled={!bulkFC||+bulkFC<=0||+bulkFC>=100}>
+          Пересчитать {bulkAffected>0?`(${bulkAffected})`:""}
+        </Btn>
+        <Btn variant="outline" onClick={()=>setShowPricing(false)}>Отмена</Btn>
+      </div>
+    </Modal>}
 
     {/* ══ МОДАЛ: Удаление блюда ══ */}
     {confirmDelDish&&<Modal title="Удалить блюдо?" onClose={()=>setConfirmDelDish(null)} width={380}>
@@ -1455,6 +1592,47 @@ function DishesTab({state,dispatch}){
         <Field label="Вес override (г)" hint="пусто = авторасчёт"><input type="number" value={form.weightOverride} onChange={e=>setForm(f=>({...f,weightOverride:e.target.value}))} placeholder={fmt2(dishWeight(form))}/></Field>
       </div>
 
+      {/* Авторасчёт цены по фудкосту */}
+      {formCost>0&&<div style={{background:`${C.teal}12`,border:`1px solid ${C.teal}44`,borderRadius:10,
+        padding:12,marginBottom:12}}>
+        <div style={{fontSize:12,color:C.teal,fontWeight:700,marginBottom:8,
+          display:"flex",alignItems:"center",gap:6}}>
+          🎯 Рассчитать цену по фудкосту
+        </div>
+        <div style={{display:"flex",gap:10,alignItems:"center",flexWrap:"wrap"}}>
+          <span style={{fontSize:13,color:C.muted}}>Себестоимость <b style={{color:C.blue}}>{fmt(formCost)} ₸</b></span>
+          <span style={{fontSize:13,color:C.muted}}>·</span>
+          <span style={{fontSize:13,color:C.muted}}>Хочу фудкост</span>
+          <div style={{display:"flex",gap:4,alignItems:"center"}}>
+            <input type="number" value={targetFC} onChange={e=>setTargetFC(e.target.value)}
+              placeholder="30" min="1" max="99"
+              style={{width:60,padding:"6px 8px",fontSize:14,textAlign:"center",
+                border:`1px solid ${C.teal}66`,background:C.surface}}/>
+            <span style={{fontSize:14,color:C.teal,fontWeight:700}}>%</span>
+          </div>
+          {targetFC&&+targetFC>0&&+targetFC<100&&<>
+            <span style={{fontSize:16,color:C.muted}}>→</span>
+            <span style={{fontSize:16,fontWeight:800,color:C.green}}>
+              {fmt(Math.round(formCost/(+targetFC/100)/10)*10)} ₸
+            </span>
+            <button onClick={()=>setForm(f=>({...f,price:String(Math.round(formCost/(+targetFC/100)/10)*10)}))}
+              style={{background:C.green,color:C.bg,border:"none",borderRadius:8,
+                padding:"7px 14px",fontSize:12,fontWeight:700,cursor:"pointer"}}>
+              Применить
+            </button>
+          </>}
+        </div>
+        <div style={{display:"flex",gap:6,marginTop:8,flexWrap:"wrap"}}>
+          {[25,30,35,40].map(fc=>(
+            <button key={fc} onClick={()=>setTargetFC(String(fc))}
+              style={{background:targetFC===String(fc)?C.teal:C.surface,
+                color:targetFC===String(fc)?C.bg:C.muted,
+                border:`1px solid ${C.border}`,borderRadius:6,padding:"4px 10px",
+                fontSize:11,fontWeight:600,cursor:"pointer"}}>{fc}%</button>
+          ))}
+        </div>
+      </div>}
+
       {/* ── Количество для роллов ── */}
       {isRollCat(form.category)&&<div style={{background:`${C.green}0f`,border:`1px solid ${C.green}33`,
         borderRadius:12,padding:"12px 16px",marginBottom:12,display:"flex",alignItems:"center",gap:16,flexWrap:"wrap"}}>
@@ -1492,6 +1670,53 @@ function DishesTab({state,dispatch}){
       </div>}
 
       {!isSetCat(form.category)&&<>
+        {/* Кнопки быстрого добавления базовых ингредиентов */}
+        {(isRollCat(form.category)||isPizzaCat(form.category))&&
+          <div style={{background:`${C.teal}12`,border:`1px solid ${C.teal}44`,borderRadius:10,
+            padding:12,marginBottom:12,marginTop:8}}>
+            <div style={{fontSize:12,color:C.teal,fontWeight:700,marginBottom:8,
+              display:"flex",alignItems:"center",gap:6}}>
+              ⚡ Быстрое добавление базы
+            </div>
+            <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+              {isRollCat(form.category)&&<>
+                <button onClick={()=>addBase("rollClosed")} style={{
+                  background:C.surface,border:`1px solid ${C.teal}66`,borderRadius:8,
+                  padding:"8px 14px",fontSize:12,color:C.text,fontWeight:600,cursor:"pointer",
+                  display:"flex",flexDirection:"column",gap:2,alignItems:"flex-start"}}>
+                  <span style={{fontWeight:700,color:C.teal}}>🍙 Закрытый ролл</span>
+                  <span style={{fontSize:10,color:C.muted}}>Рис 120г + Нори 1шт</span>
+                </button>
+                <button onClick={()=>addBase("rollOpen")} style={{
+                  background:C.surface,border:`1px solid ${C.teal}66`,borderRadius:8,
+                  padding:"8px 14px",fontSize:12,color:C.text,fontWeight:600,cursor:"pointer",
+                  display:"flex",flexDirection:"column",gap:2,alignItems:"flex-start"}}>
+                  <span style={{fontWeight:700,color:C.teal}}>🍥 Открытый ролл</span>
+                  <span style={{fontSize:10,color:C.muted}}>Рис 160г + Нори 0.5шт</span>
+                </button>
+              </>}
+              {isPizzaCat(form.category)&&<>
+                <button onClick={()=>addBase("pizza25")} style={{
+                  background:C.surface,border:`1px solid ${C.teal}66`,borderRadius:8,
+                  padding:"8px 14px",fontSize:12,color:C.text,fontWeight:600,cursor:"pointer",
+                  display:"flex",flexDirection:"column",gap:2,alignItems:"flex-start"}}>
+                  <span style={{fontWeight:700,color:C.teal}}>🍕 Пицца 25см</span>
+                  <span style={{fontSize:10,color:C.muted}}>Тесто 250г + Моцарелла 100г</span>
+                </button>
+                <button onClick={()=>addBase("pizza30")} style={{
+                  background:C.surface,border:`1px solid ${C.teal}66`,borderRadius:8,
+                  padding:"8px 14px",fontSize:12,color:C.text,fontWeight:600,cursor:"pointer",
+                  display:"flex",flexDirection:"column",gap:2,alignItems:"flex-start"}}>
+                  <span style={{fontWeight:700,color:C.teal}}>🍕 Пицца 30см</span>
+                  <span style={{fontSize:10,color:C.muted}}>Тесто 280г + Моцарелла 150г</span>
+                </button>
+              </>}
+            </div>
+            <div style={{fontSize:10,color:C.muted,marginTop:8}}>
+              Нажми — базовые ингредиенты добавятся в состав. Начинку добавь вручную ниже.
+            </div>
+          </div>}
+
         <div style={{fontWeight:700,fontSize:13,marginBottom:8,paddingTop:8,borderTop:`1px solid ${C.border}`,
           display:"flex",alignItems:"center",gap:8}}>🥦 <span>Из продуктов</span>
           {form.productLines.length>0&&<Badge color="gray">{form.productLines.length}</Badge>}
@@ -1509,23 +1734,35 @@ function DishesTab({state,dispatch}){
                   fontSize:12,fontWeight:700,cursor:"pointer",flexShrink:0,whiteSpace:"nowrap"}}>× Удалить</button>
               </div>
               <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
-                <div style={{display:"flex",alignItems:"center",gap:4}}>
-                  <span style={{fontSize:11,color:C.muted}}>Брутто</span>
-                  <input type="number" value={r.brutto} min="0"
-                    onChange={e=>updatePRow(r.productId,"brutto",e.target.value)}
-                    style={{width:72,padding:"5px 8px",fontSize:13,borderRadius:8,
-                      background:C.surface,border:`1px solid ${C.border}`,color:C.text}}/>
-                  <span style={{fontSize:12,color:C.muted}}>{p.unit}</span>
-                </div>
-                <div style={{display:"flex",alignItems:"center",gap:4}}>
-                  <span style={{fontSize:11,color:C.muted}}>Потери %</span>
-                  <input type="number" value={r.loss} min="0" max="100"
-                    onChange={e=>updatePRow(r.productId,"loss",e.target.value)}
-                    style={{width:58,padding:"5px 8px",fontSize:13,borderRadius:8,
-                      background:C.surface,border:`1px solid ${C.border}`,color:C.text}}/>
-                </div>
+                {p.pieceWeight
+                  ?<div style={{display:"flex",alignItems:"center",gap:4}}>
+                    <span style={{fontSize:11,color:C.muted}}>Штук</span>
+                    <input type="number" value={r.pcs||Math.round(r.brutto/p.pieceWeight)} min="0"
+                      onChange={e=>updatePRowPcs(r.productId,e.target.value)}
+                      style={{width:60,padding:"5px 8px",fontSize:13,borderRadius:8,
+                        background:`${C.teal}10`,border:`1px solid ${C.teal}55`,color:C.text}}/>
+                    <span style={{fontSize:12,color:C.teal}}>шт</span>
+                    <span style={{fontSize:11,color:C.muted}}>= {fmt2(r.brutto)} г</span>
+                  </div>
+                  :<>
+                    <div style={{display:"flex",alignItems:"center",gap:4}}>
+                      <span style={{fontSize:11,color:C.muted}}>Брутто</span>
+                      <input type="number" value={r.brutto} min="0"
+                        onChange={e=>updatePRow(r.productId,"brutto",e.target.value)}
+                        style={{width:72,padding:"5px 8px",fontSize:13,borderRadius:8,
+                          background:C.surface,border:`1px solid ${C.border}`,color:C.text}}/>
+                      <span style={{fontSize:12,color:C.muted}}>{p.unit}</span>
+                    </div>
+                    <div style={{display:"flex",alignItems:"center",gap:4}}>
+                      <span style={{fontSize:11,color:C.muted}}>Потери %</span>
+                      <input type="number" value={r.loss} min="0" max="100"
+                        onChange={e=>updatePRow(r.productId,"loss",e.target.value)}
+                        style={{width:58,padding:"5px 8px",fontSize:13,borderRadius:8,
+                          background:C.surface,border:`1px solid ${C.border}`,color:C.text}}/>
+                    </div>
+                  </>}
                 <div style={{marginLeft:"auto",display:"flex",gap:12}}>
-                  <span style={{fontSize:12,color:C.green,fontWeight:700}}>→ {fmt2(n)} {p.unit}</span>
+                  <span style={{fontSize:12,color:C.green,fontWeight:700}}>→ {fmt2(n)} {p.pieceWeight?"г":p.unit}</span>
                   <span style={{fontSize:12,color:C.blue,fontWeight:700}}>{fmt(productUnitCost(p)*n)} ₸</span>
                 </div>
               </div>
@@ -1589,13 +1826,25 @@ function DishesTab({state,dispatch}){
           <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"flex-end"}}>
             {(()=>{
               const selP=products.find(p=>p.id===+pRow.productId);
+              const hasPcs=selP&&selP.pieceWeight;
+              if(hasPcs){
+                return <Field label="Количество, шт" hint={`1 шт = ${selP.pieceWeight} г`} style={{flex:1,minWidth:100}}>
+                  <input type="number" value={pRow.brutto} onChange={e=>setPRow(r=>({...r,brutto:e.target.value}))}
+                    placeholder="2" style={{border:`1px solid ${C.teal}55`,background:`${C.teal}10`}}/>
+                </Field>;
+              }
               const u=selP?selP.unit:"г";
               return <Field label={`Брутто, ${u}`} style={{flex:1,minWidth:100}}>
                 <input type="number" value={pRow.brutto} onChange={e=>setPRow(r=>({...r,brutto:e.target.value}))}
                   placeholder={u==="шт"?"1":"100"}/>
               </Field>;
             })()}
-            <Field label="% потерь" style={{flex:1,minWidth:80}}><input type="number" value={pRow.loss} onChange={e=>setPRow(r=>({...r,loss:e.target.value}))}/></Field>
+            {(()=>{
+              const selP=products.find(p=>p.id===+pRow.productId);
+              // Для штучных продуктов потери обычно не нужны — скрываем
+              if(selP&&selP.pieceWeight)return null;
+              return <Field label="% потерь" style={{flex:1,minWidth:80}}><input type="number" value={pRow.loss} onChange={e=>setPRow(r=>({...r,loss:e.target.value}))}/></Field>;
+            })()}
             <div style={{paddingBottom:14}}><Btn onClick={addPRow} disabled={!pRow.productId||!pRow.brutto}>+ Добавить</Btn></div>
           </div>
         </div>
@@ -2286,8 +2535,9 @@ function App(){
 
   function encodeData(){
     // Экспортируем только последнюю цену каждого продукта (без всей истории)
-    const products = state.products.map(({id,name,unit,priceFor,category,priceHistory})=>({
+    const products = state.products.map(({id,name,unit,priceFor,category,pieceWeight,priceHistory})=>({
       id,name,unit,priceFor,category,
+      ...(pieceWeight?{pieceWeight}:{}),
       priceHistory: priceHistory?.length ? [priceHistory[priceHistory.length-1]] : []
     }));
     const semis = state.semis.map(({id,name,outputUnit,outputQtyOverride,pieceWeight,composition,semiLines})=>({
