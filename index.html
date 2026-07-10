@@ -84,11 +84,11 @@ const markupPct=(cost,price)=>price?Math.round(((price-cost)/price)*100):0;
 // ════════════════════ ДАННЫЕ ════════════════════
 const NOW=Date.now();
 const DISH_CATEGORIES=["Комбо","Сеты","Суши","Классические роллы","Жареные роллы","Запечённые роллы","Сложные роллы","Роллы 8шт","Роллы 10шт","Пицца 25см","Пицца 30см","Бургеры","Донеры","Вок","Закуски","Напитки"];
-const PRODUCT_CATEGORIES=["Рыба","Мясо","Овощи","Сыры","Соуса","Специи","Масла","Упаковка","Другое"];
+const PRODUCT_CATEGORIES=["Рыба","Мясо","Овощи","Сыры","Соуса","Специи","Масла","Напитки","Упаковка","Другое"];
 // Иконка по категории продукта
 const CATEGORY_ICONS={
   "Рыба":"🐟","Мясо":"🥩","Овощи":"🥦","Сыры":"🧀","Соуса":"🫙",
-  "Специи":"🧂","Масла":"🛢️","Упаковка":"📦","Другое":"🍶"
+  "Специи":"🧂","Масла":"🛢️","Напитки":"🥤","Упаковка":"📦","Другое":"🍶"
 };
 const catIcon=(category)=>CATEGORY_ICONS[category]||"🍶";
 const SET_CATEGORIES=["Комбо","Сеты"];
@@ -1253,6 +1253,150 @@ function SemisTab({state,dispatch}){
 }
 
 // ════════════════════ ТАБ: ГОТОВЫЕ БЛЮДА ════════════════════
+// ══════════ КАРТОЧКА СОСТАВА БЛЮДА ══════════
+function DishDetailCard({dish,products,semis,dishes,cost,weight}){
+  // Продукты в составе
+  const prodRows=(dish.productLines||[]).map(r=>{
+    const p=products.find(p=>p.id===r.productId);
+    if(!p)return null;
+    const n=netto(r.brutto,r.loss);
+    const lineCost=productUnitCost(p)*n;
+    const isPiece=p.pieceWeight&&r.pcs;
+    return {name:p.name,unit:p.unit,brutto:r.brutto,loss:r.loss,netto:n,
+      cost:lineCost,category:p.category,isPiece,pcs:r.pcs};
+  }).filter(Boolean);
+
+  // Полуфабрикаты в составе
+  const semiRows=(dish.semiLines||[]).map(r=>{
+    const s=semis.find(s=>s.id===r.semiId);
+    if(!s)return null;
+    const perG=semiCostPerUnit(s,products,semis);
+    const lineCost=perG*r.qty;
+    const isPiece=s.pieceWeight&&r.pcs;
+    return {name:s.name,qty:r.qty,unit:s.outputUnit,cost:lineCost,isPiece,pcs:r.pcs};
+  }).filter(Boolean);
+
+  // Вложенные блюда (для сетов)
+  const dishRows=(dish.dishLines||[]).map(r=>{
+    const d=dishes.find(d=>d.id===r.dishId);
+    if(!d)return null;
+    const dc=dishCost(d,products,semis,dishes);
+    const stdPcs=rollPcs(d.category);
+    const lineCost=stdPcs&&r.pcs?dc/stdPcs*r.pcs*r.qty:dc*r.qty;
+    return {name:d.name,qty:r.qty,pcs:r.pcs,cost:lineCost};
+  }).filter(Boolean);
+
+  const fc=dish.price>0?Math.round(cost/dish.price*100):0;
+  const profit=100-fc;
+
+  const th={textAlign:"left",padding:"6px 10px",fontSize:11,color:C.muted,
+    fontWeight:700,textTransform:"uppercase",letterSpacing:".5px"};
+  const td={padding:"7px 10px",fontSize:13,color:C.text,borderTop:`1px solid ${C.border}`};
+
+  return <div style={{padding:"16px 20px",background:C.bg}}>
+    <div style={{fontSize:13,fontWeight:700,color:C.green,marginBottom:12,
+      textTransform:"uppercase",letterSpacing:"1px"}}>Состав блюда</div>
+
+    {/* Продукты */}
+    {prodRows.length>0&&<div style={{marginBottom:14}}>
+      <div style={{fontSize:12,color:C.muted,fontWeight:600,marginBottom:6}}>🥦 Продукты</div>
+      <div style={{background:C.card,borderRadius:10,overflow:"hidden",border:`1px solid ${C.border}`}}>
+        <table style={{width:"100%",borderCollapse:"collapse"}}>
+          <thead><tr style={{background:C.surface}}>
+            <th style={th}>Наименование</th>
+            <th style={{...th,textAlign:"center"}}>Брутто</th>
+            <th style={{...th,textAlign:"center"}}>Потери</th>
+            <th style={{...th,textAlign:"center"}}>Нетто</th>
+            <th style={{...th,textAlign:"right"}}>Стоимость</th>
+          </tr></thead>
+          <tbody>
+            {prodRows.map((r,i)=><tr key={i}>
+              <td style={td}>{catIcon(r.category)} {r.name}</td>
+              <td style={{...td,textAlign:"center"}}>
+                {r.isPiece?<span style={{color:C.teal,fontWeight:600}}>{r.pcs} шт</span>:`${fmt2(r.brutto)} ${r.unit}`}
+              </td>
+              <td style={{...td,textAlign:"center",color:r.loss?C.accent:C.muted}}>{r.loss?`${r.loss}%`:"—"}</td>
+              <td style={{...td,textAlign:"center"}}>{fmt2(r.netto)} {r.unit}</td>
+              <td style={{...td,textAlign:"right",fontWeight:600,color:C.blue}}>{fmt(r.cost)} ₸</td>
+            </tr>)}
+          </tbody>
+        </table>
+      </div>
+    </div>}
+
+    {/* Полуфабрикаты */}
+    {semiRows.length>0&&<div style={{marginBottom:14}}>
+      <div style={{fontSize:12,color:C.muted,fontWeight:600,marginBottom:6}}>🥣 Полуфабрикаты</div>
+      <div style={{background:C.card,borderRadius:10,overflow:"hidden",border:`1px solid ${C.border}`}}>
+        <table style={{width:"100%",borderCollapse:"collapse"}}>
+          <thead><tr style={{background:C.surface}}>
+            <th style={th}>Наименование</th>
+            <th style={{...th,textAlign:"center"}}>Количество</th>
+            <th style={{...th,textAlign:"right"}}>Стоимость</th>
+          </tr></thead>
+          <tbody>
+            {semiRows.map((r,i)=><tr key={i}>
+              <td style={td}>{r.name}</td>
+              <td style={{...td,textAlign:"center"}}>
+                {r.isPiece?<span style={{color:C.teal,fontWeight:600}}>{r.pcs} шт = {fmt2(r.qty)} г</span>:`${fmt2(r.qty)} ${r.unit}`}
+              </td>
+              <td style={{...td,textAlign:"right",fontWeight:600,color:C.blue}}>{fmt(r.cost)} ₸</td>
+            </tr>)}
+          </tbody>
+        </table>
+      </div>
+    </div>}
+
+    {/* Вложенные блюда (сеты) */}
+    {dishRows.length>0&&<div style={{marginBottom:14}}>
+      <div style={{fontSize:12,color:C.muted,fontWeight:600,marginBottom:6}}>🍱 Блюда в составе</div>
+      <div style={{background:C.card,borderRadius:10,overflow:"hidden",border:`1px solid ${C.border}`}}>
+        <table style={{width:"100%",borderCollapse:"collapse"}}>
+          <thead><tr style={{background:C.surface}}>
+            <th style={th}>Блюдо</th>
+            <th style={{...th,textAlign:"center"}}>Кол-во</th>
+            <th style={{...th,textAlign:"right"}}>Стоимость</th>
+          </tr></thead>
+          <tbody>
+            {dishRows.map((r,i)=><tr key={i}>
+              <td style={td}>{r.name}{r.pcs?` (${r.pcs} шт)`:""}</td>
+              <td style={{...td,textAlign:"center"}}>{r.qty}</td>
+              <td style={{...td,textAlign:"right",fontWeight:600,color:C.blue}}>{fmt(r.cost)} ₸</td>
+            </tr>)}
+          </tbody>
+        </table>
+      </div>
+    </div>}
+
+    {/* Итоги */}
+    <div style={{display:"flex",gap:16,flexWrap:"wrap",padding:"12px 16px",
+      background:C.card,borderRadius:10,border:`1px solid ${C.border}`}}>
+      <div>
+        <div style={{fontSize:11,color:C.muted,textTransform:"uppercase"}}>Выход</div>
+        <div style={{fontSize:16,fontWeight:700,color:C.text}}>{fmt2(weight)} г</div>
+      </div>
+      <div>
+        <div style={{fontSize:11,color:C.muted,textTransform:"uppercase"}}>Себестоимость</div>
+        <div style={{fontSize:16,fontWeight:700,color:C.blue}}>{fmt(cost)} ₸</div>
+      </div>
+      {dish.price>0&&<>
+        <div>
+          <div style={{fontSize:11,color:C.muted,textTransform:"uppercase"}}>Цена продажи</div>
+          <div style={{fontSize:16,fontWeight:700,color:C.green}}>{fmt(dish.price)} ₸</div>
+        </div>
+        <div>
+          <div style={{fontSize:11,color:C.muted,textTransform:"uppercase"}}>Фудкост</div>
+          <div style={{fontSize:16,fontWeight:700,color:fc<=35?C.green:fc<=45?C.yellow:C.accent}}>{fc}%</div>
+        </div>
+        <div>
+          <div style={{fontSize:11,color:C.muted,textTransform:"uppercase"}}>Прибыль</div>
+          <div style={{fontSize:16,fontWeight:700,color:C.green}}>{profit}%</div>
+        </div>
+      </>}
+    </div>
+  </div>;
+}
+
 function DishesTab({state,dispatch}){
   const {dishes,products,semis}=state;
   const [catFilter,setCatFilter]=useState("all");
@@ -1270,6 +1414,7 @@ function DishesTab({state,dispatch}){
   const [sRow,setSRow]=useState({semiId:"",qty:""});
   const [dRow,setDRow]=useState({dishId:"",qty:"",pcs:""});
   const [targetFC,setTargetFC]=useState(""); // целевой фудкост для авторасчёта цены
+  const [expandedDish,setExpandedDish]=useState(null); // раскрытая карточка состава блюда
   const [showPricing,setShowPricing]=useState(false); // модал массового ценообразования
   const [bulkCat,setBulkCat]=useState("all"); // категория для массового пересчёта
   const [bulkFC,setBulkFC]=useState(""); // фудкост для массового пересчёта
@@ -1536,9 +1681,16 @@ function DishesTab({state,dispatch}){
             {g.items.map(d=>{
               const cost=dishCost(d,products,semis,dishes);
               const weight=d.weightOverride||dishWeight(d,dishes);
-              return <tr key={d.id}>
+              const isExpanded=expandedDish===d.id;
+              return <React.Fragment key={d.id}>
+              <tr style={{cursor:"pointer",background:isExpanded?`${C.green}08`:"transparent"}}
+                onClick={()=>setExpandedDish(isExpanded?null:d.id)}>
                 <td style={{fontWeight:600}}>
-                  {d.name}
+                  <span style={{display:"inline-flex",alignItems:"center",gap:6}}>
+                    <span style={{color:C.green,fontSize:11,transition:"transform .2s",
+                      transform:isExpanded?"rotate(90deg)":"rotate(0deg)",display:"inline-block"}}>▶</span>
+                    {d.name}
+                  </span>
                   {isRollCat(d.category)&&<span style={{marginLeft:6,fontSize:11,
                     color:C.green,background:`${C.green}15`,borderRadius:6,padding:"1px 7px",fontWeight:700}}>
                     {rollPcs(d.category)} шт
@@ -1556,19 +1708,25 @@ function DishesTab({state,dispatch}){
                 </td>
                 <td><PriceTag value={Math.round(cost)} cost={cost} price={d.price} kind="cost"/></td>
                 <td>
-                  <div style={{display:"flex",alignItems:"flex-start",gap:6}}>
+                  <div style={{display:"flex",alignItems:"flex-start",gap:6}} onClick={e=>e.stopPropagation()}>
                     <PriceTag value={d.price} cost={cost} price={d.price} kind="price"/>
                     <button onClick={()=>{setShowPriceEdit(d.id);setNewDishPrice(String(d.price));}}
                       style={{background:"none",color:C.muted,fontSize:13,marginTop:2}}>✏</button>
                   </div>
                 </td>
                 <td>
-                  <div style={{display:"flex",gap:4}}>
+                  <div style={{display:"flex",gap:4}} onClick={e=>e.stopPropagation()}>
                     <Btn size="sm" variant="outline" onClick={()=>openEdit(d)}>✏</Btn>
                     <Btn size="sm" variant="danger" onClick={()=>del(d.id)}>✕</Btn>
                   </div>
                 </td>
-              </tr>;
+              </tr>
+              {isExpanded&&<tr>
+                <td colSpan={5} style={{padding:0,borderBottom:`2px solid ${C.green}33`}}>
+                  <DishDetailCard dish={d} products={products} semis={semis} dishes={dishes} cost={cost} weight={weight}/>
+                </td>
+              </tr>}
+              </React.Fragment>;
             })}
           </tbody>
         </table>
