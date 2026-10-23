@@ -1399,6 +1399,11 @@ function DishDetailCard({dish,products,semis,dishes,cost,weight}){
 
 function DishesTab({state,dispatch}){
   const {dishes,products,semis}=state;
+  // свёрнутые разделы в форме блюда
+  const [fold,setFold]=useState({});
+  const toggleFold=k=>setFold(f=>({...f,[k]:!f[k]}));
+  const foldIcon=k=><span title={fold[k]?"Развернуть":"Свернуть"} style={{marginLeft:"auto",color:C.muted,fontSize:14,
+    padding:"2px 8px",borderRadius:6,border:`1px solid ${C.border}`}}>{fold[k]?"▸":"▾"}</span>;
   const [catFilter,setCatFilter]=useState("all");
   const [search,setSearch]=useState("");
   const [showForm,setShowForm]=useState(false);
@@ -1876,10 +1881,12 @@ function DishesTab({state,dispatch}){
             </div>
           </div>}
 
-        <div style={{fontWeight:700,fontSize:13,marginBottom:8,paddingTop:8,borderTop:`1px solid ${C.border}`,
-          display:"flex",alignItems:"center",gap:8}}>🥦 <span>Из продуктов</span>
+        <div onClick={()=>toggleFold("prod")} style={{fontWeight:700,fontSize:13,marginBottom:8,paddingTop:8,borderTop:`1px solid ${C.border}`,
+          display:"flex",alignItems:"center",gap:8,cursor:"pointer",userSelect:"none"}}>🥦 <span>Из продуктов</span>
           {form.productLines.length>0&&<Badge color="gray">{form.productLines.length}</Badge>}
+          {foldIcon("prod")}
         </div>
+        {!fold.prod&&<>
         {form.productLines.length>0&&<div style={{marginBottom:10}}>
           {form.productLines.map(r=>{
             const p=products.find(p=>p.id===r.productId);if(!p)return null;
@@ -2007,11 +2014,14 @@ function DishesTab({state,dispatch}){
             <div style={{paddingBottom:14}}><Btn onClick={addPRow} disabled={!pRow.productId||!pRow.brutto}>+ Добавить</Btn></div>
           </div>
         </div>
+        </>}
 
-        <div style={{fontWeight:700,fontSize:13,marginBottom:8,paddingTop:4,borderTop:`1px solid ${C.border}`,
-          display:"flex",alignItems:"center",gap:8}}>🥣 <span>Из полуфабрикатов</span>
+        <div onClick={()=>toggleFold("semi")} style={{fontWeight:700,fontSize:13,marginBottom:8,paddingTop:4,borderTop:`1px solid ${C.border}`,
+          display:"flex",alignItems:"center",gap:8,cursor:"pointer",userSelect:"none"}}>🥣 <span>Из полуфабрикатов</span>
           {form.semiLines.length>0&&<Badge color="purple">{form.semiLines.length}</Badge>}
+          {foldIcon("semi")}
         </div>
+        {!fold.semi&&<>
         {form.semiLines.length>0&&<div style={{marginBottom:10}}>
           {form.semiLines.map(r=>{
             const s=semis.find(s=>s.id===r.semiId);if(!s)return null;
@@ -2071,12 +2081,15 @@ function DishesTab({state,dispatch}){
             <div style={{paddingBottom:14}}><Btn onClick={addSRowSmart} disabled={!sRow.semiId||!sRow.qty} variant="purple">+ Добавить</Btn></div>
           </div>
         </div>
+        </>}
       </>
 
       {isSetCat(form.category)&&<>
-        <div style={{fontWeight:700,marginBottom:10,paddingTop:4,borderTop:`1px solid ${C.border}`,display:"flex",alignItems:"center",gap:8}}>
+        <div onClick={()=>toggleFold("set")} style={{fontWeight:700,marginBottom:10,paddingTop:4,borderTop:`1px solid ${C.border}`,display:"flex",alignItems:"center",gap:8,cursor:"pointer",userSelect:"none"}}>
           <span>📦 Состав сета (готовые блюда)</span><Badge color="yellow">{form.category}</Badge>
+          {foldIcon("set")}
         </div>
+        {!fold.set&&<>
         <div style={{background:C.yellowSoft,border:`1px solid ${C.yellow}44`,borderRadius:8,padding:"8px 12px",fontSize:12,color:C.yellow,marginBottom:10}}>
           ⚡ Упаковка вложенных роллов вычитается автоматически — в сете считается только упаковка сета
         </div>
@@ -2206,10 +2219,13 @@ function DishesTab({state,dispatch}){
             <div style={{paddingBottom:14}}><Btn size="sm" onClick={addDRow} disabled={!dRow.dishId||!dRow.qty}>+ Добавить</Btn></div>
           </div>
         </div>
+        </>}
 
-        <div style={{fontWeight:700,marginBottom:10,paddingTop:4,borderTop:`1px solid ${C.border}`,display:"flex",alignItems:"center",gap:8}}>
+        <div onClick={()=>toggleFold("setpack")} style={{fontWeight:700,marginBottom:10,paddingTop:4,borderTop:`1px solid ${C.border}`,display:"flex",alignItems:"center",gap:8,cursor:"pointer",userSelect:"none"}}>
           <span>🎁 Упаковка сета</span><Badge color="purple">из справочника Упаковка</Badge>
+          {foldIcon("setpack")}
         </div>
+        {!fold.setpack&&<>
         {form.packLines.length>0&&<table style={{marginBottom:10}}>
           <thead><tr><th>Упаковка</th><th>Кол-во, шт</th><th>Стоимость</th><th></th></tr></thead>
           <tbody>
@@ -2237,13 +2253,16 @@ function DishesTab({state,dispatch}){
             <div style={{paddingBottom:14}}><Btn size="sm" onClick={addPkRow}>+</Btn></div>
           </div>
         </div>
+        </>}
       </>}
 
       {/* Упаковка — доступна для всех категорий */}
       <>
-        <div style={{fontWeight:700,marginBottom:10,paddingTop:4,borderTop:`1px solid ${C.border}`,display:"flex",alignItems:"center",gap:8}}>
+        <div onClick={()=>toggleFold("pack")} style={{fontWeight:700,marginBottom:10,paddingTop:4,borderTop:`1px solid ${C.border}`,display:"flex",alignItems:"center",gap:8,cursor:"pointer",userSelect:"none"}}>
           <span>🎁 Упаковка</span><Badge color="gray">включается в себестоимость</Badge>
+          {foldIcon("pack")}
         </div>
+        {!fold.pack&&<>
         {form.packLines.length>0&&<table style={{marginBottom:10}}>
           <thead><tr><th>Упаковка</th><th>Кол-во, шт</th><th>Стоимость</th><th></th></tr></thead>
           <tbody>
@@ -2271,6 +2290,7 @@ function DishesTab({state,dispatch}){
             <div style={{paddingBottom:14}}><Btn size="sm" onClick={addPkRow}>+</Btn></div>
           </div>
         </div>
+        </>}
       </>
 
       <div style={{background:`linear-gradient(135deg,${C.greenSoft},${C.blueSoft})`,
