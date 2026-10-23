@@ -160,6 +160,21 @@ function dishPackagingCost(dish,products){
   },0);
   return fromProducts+fromPack;
 }
+// Добавки блюда (соуса, имбирь+васаби из категории «Соуса») — в сет не наследуются, у сета свои
+function dishAddonCost(dish,products,semis,dishes){
+  return (dish.dishLines||[]).reduce((s,r)=>{
+    const d=dishes?.find(d=>d.id===r.dishId);
+    if(!d||d.category!=="Соуса")return s;
+    return s+dishCost(d,products,semis,dishes)*r.qty;
+  },0);
+}
+function dishAddonWeight(dish,dishes){
+  return (dish.dishLines||[]).reduce((s,r)=>{
+    const d=dishes?.find(d=>d.id===r.dishId);
+    if(!d||d.category!=="Соуса")return s;
+    return s+(d.weightOverride||dishWeight(d,dishes))*r.qty;
+  },0);
+}
 function dishCost(dish,products,semis,dishes){
   const fromProducts=(dish.productLines||[]).reduce((s,r)=>{
     const p=products.find(p=>p.id===r.productId);
@@ -177,7 +192,7 @@ function dishCost(dish,products,semis,dishes){
     // Деньги считаются ТОЛЬКО по qty (доля палки). Нарезка (cutPcs) на себестоимость не влияет.
     const costPerUnit=dishCost(d,products,semis,dishes);
     const effectiveCost=costPerUnit*r.qty;
-    const packCost=isSetCat(dish.category)?dishPackagingCost(d,products)*r.qty:0;
+    const packCost=isSetCat(dish.category)?(dishPackagingCost(d,products)+dishAddonCost(d,products,semis,dishes))*r.qty:0;
     return s+effectiveCost-packCost;
   },0);
   const fromPack=(dish.packLines||[]).reduce((s,r)=>{
@@ -194,7 +209,7 @@ function dishWeight(dish,dishes){
     const d=dishes?.find(d=>d.id===r.dishId);
     if(!d||d.id===dish.id)return s;
     // Вес считается только по qty (доля палки). Нарезка на вес не влияет.
-    const wPerUnit=(d.weightOverride||dishWeight(d,dishes));
+    const wPerUnit=d.weightOverride||(dishWeight(d,dishes)-(isSetCat(dish.category)?dishAddonWeight(d,dishes):0));
     const effectiveW=wPerUnit*r.qty;
     return s+effectiveW;
   },0);
@@ -2098,7 +2113,7 @@ function DishesTab({state,dispatch}){
         </div>
         {!fold.set&&<>
         <div style={{background:C.yellowSoft,border:`1px solid ${C.yellow}44`,borderRadius:8,padding:"8px 12px",fontSize:12,color:C.yellow,marginBottom:10}}>
-          ⚡ Упаковка вложенных роллов вычитается автоматически — в сете считается только упаковка сета
+          ⚡ Упаковка и добавки (имбирь, васаби, соусы) вложенных блюд вычитаются автоматически — в сете считаются только упаковка и добавки сета
         </div>
         <div style={{background:C.blueSoft,border:`1px solid ${C.blue}44`,borderRadius:8,padding:"8px 12px",fontSize:12,color:C.blue,marginBottom:10,lineHeight:1.5}}>
           <b>Порций</b> — сколько палок ролла (1 = целая, 0.5 = половина). Считает себестоимость.<br/>
@@ -2110,7 +2125,7 @@ function DishesTab({state,dispatch}){
             <th>Порций</th>
             <th>Нарезка</th>
             <th>Себест.</th>
-            <th>−Упак.</th>
+            <th>−Упак./доб.</th>
             <th>Итого</th>
             <th></th>
           </tr></thead>
@@ -2121,7 +2136,7 @@ function DishesTab({state,dispatch}){
               const stdPcs=rollPcs(d.category);
               // Деньги по qty (доля палки). Нарезка (cutPcs) не влияет.
               const effectiveCost=dishCost(d,products,semis,dishes)*r.qty;
-              const packCost=dishPackagingCost(d,products)*r.qty;
+              const packCost=(dishPackagingCost(d,products)+dishAddonCost(d,products,semis,dishes))*r.qty;
               const netCost=effectiveCost-packCost;
               return <tr key={r.dishId}>
                 <td>
