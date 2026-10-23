@@ -147,11 +147,18 @@ function semiBatchCost(semi,products,semis){
   return fromP+fromS;
 }
 function dishPackagingCost(dish,products){
-  return (dish.productLines||[]).reduce((s,r)=>{
+  // Соус уже разлит в соусницу — его упаковка остаётся в сете
+  if(dish.category==="Соуса")return 0;
+  const fromProducts=(dish.productLines||[]).reduce((s,r)=>{
     const p=products.find(p=>p.id===r.productId);
     if(!p||p.category!=="Упаковка")return s;
     return s+productUnitCost(p)*r.brutto;
   },0);
+  const fromPack=(dish.packLines||[]).reduce((s,r)=>{
+    const p=products.find(p=>p.id===r.productId);
+    return p?s+productUnitCost(p)*r.qty:s;
+  },0);
+  return fromProducts+fromPack;
 }
 function dishCost(dish,products,semis,dishes){
   const fromProducts=(dish.productLines||[]).reduce((s,r)=>{
