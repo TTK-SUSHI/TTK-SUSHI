@@ -2097,7 +2097,7 @@ function DishesTab({state,dispatch}){
           <b>Порций</b> — сколько палок ролла (1 = целая, 0.5 = половина). Считает себестоимость.<br/>
           <b>Нарезка</b> — на сколько кусочков режется. Только для повара, на цену НЕ влияет.
         </div>
-        {form.dishLines.length>0&&<table style={{marginBottom:10}}>
+        {form.dishLines.some(l=>dishes.find(d=>d.id===l.dishId)?.category!=="Соуса")&&<table style={{marginBottom:10}}>
           <thead><tr>
             <th>Блюдо</th>
             <th>Порций</th>
@@ -2109,7 +2109,7 @@ function DishesTab({state,dispatch}){
           </tr></thead>
           <tbody>
             {form.dishLines.map(r=>{
-              const d=dishes.find(d=>d.id===r.dishId);if(!d)return null;
+              const d=dishes.find(d=>d.id===r.dishId);if(!d||d.category==="Соуса")return null;
               const isRoll=isRollCat(d.category);
               const stdPcs=rollPcs(d.category);
               // Деньги по qty (доля палки). Нарезка (cutPcs) не влияет.
@@ -2159,7 +2159,7 @@ function DishesTab({state,dispatch}){
               color:dCatFilter==="all"?C.bg:C.muted,
               border:`1px solid ${dCatFilter==="all"?C.green:C.border}`,
               borderRadius:7,padding:"4px 10px",fontSize:11,fontWeight:700}}>Все</button>
-            {DISH_CATEGORIES.filter(c=>!isSetCat(c)).map(cat=>(
+            {DISH_CATEGORIES.filter(c=>!isSetCat(c)&&c!=="Соуса").map(cat=>(
               <button key={cat} onClick={()=>setDCatFilter(cat)} style={{
                 background:dCatFilter===cat?C.green:C.surface,
                 color:dCatFilter===cat?C.bg:C.muted,
@@ -2176,7 +2176,7 @@ function DishesTab({state,dispatch}){
           {/* Живой список блюд */}
           {(()=>{
             const availDishes=dishes
-              .filter(d=>d.id!==editId&&!isSetCat(d.category))
+              .filter(d=>d.id!==editId&&!isSetCat(d.category)&&d.category!=="Соуса")
               .filter(d=>dCatFilter==="all"||d.category===dCatFilter)
               .filter(d=>!dSearch||d.name.toLowerCase().includes(dSearch.toLowerCase()))
               .filter(d=>!form.dishLines.find(l=>l.dishId===d.id));
@@ -2255,6 +2255,44 @@ function DishesTab({state,dispatch}){
         </div>
         </>}
       </>}
+
+      {/* Соусы к блюду — готовые соуса (уже в соуснице) из категории «Соуса», для всех категорий */}
+      {form.category!=="Соуса"&&(()=>{
+        const sauceDishes=dishes.filter(d=>d.category==="Соуса"&&d.id!==editId);
+        const sauceLines=form.dishLines.filter(l=>sauceDishes.find(d=>d.id===l.dishId));
+        return <>
+        <div onClick={()=>toggleFold("sauce")} style={{fontWeight:700,marginBottom:10,paddingTop:4,borderTop:`1px solid ${C.border}`,display:"flex",alignItems:"center",gap:8,cursor:"pointer",userSelect:"none"}}>
+          <span>🥢 Соусы к блюду</span>
+          {sauceLines.length>0&&<Badge color="gray">{sauceLines.length}</Badge>}
+          {foldIcon("sauce")}
+        </div>
+        {!fold.sauce&&<>
+          {sauceLines.length>0&&<table style={{marginBottom:10}}>
+            <thead><tr><th>Соус</th><th>Кол-во, шт</th><th>Себест.</th><th></th></tr></thead>
+            <tbody>
+              {sauceLines.map(r=>{
+                const d=sauceDishes.find(d=>d.id===r.dishId);
+                return <tr key={r.dishId}>
+                  <td style={{fontWeight:600}}>{d.name}</td>
+                  <td><input type="number" value={r.qty} onChange={e=>updateDRow(r.dishId,"qty",e.target.value)} style={{width:60,padding:"4px 8px",fontSize:13}} min="1"/></td>
+                  <td style={{fontWeight:700,color:C.purple}}>{fmt(dishCost(d,products,semis,dishes)*r.qty)} ₸</td>
+                  <td><button onClick={()=>removeDRow(r.dishId)} style={{background:"none",color:C.muted,fontSize:18}}>×</button></td>
+                </tr>;
+              })}
+            </tbody>
+          </table>}
+          <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:14}}>
+            {sauceDishes.filter(d=>!sauceLines.find(l=>l.dishId===d.id)).map(d=>
+              <button key={d.id} onClick={()=>setForm(f=>({...f,dishLines:[...f.dishLines,{dishId:d.id,qty:1}]}))}
+                style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:"6px 12px",
+                  fontSize:12,color:C.text,fontWeight:600,cursor:"pointer"}}>
+                + {d.name} <span style={{color:C.muted}}>{fmt(dishCost(d,products,semis,dishes))} ₸</span>
+              </button>)}
+            {sauceDishes.length===0&&<span style={{fontSize:12,color:C.muted}}>Нет блюд в категории «Соуса»</span>}
+          </div>
+        </>}
+        </>;
+      })()}
 
       {/* Упаковка — доступна для всех категорий */}
       <>
