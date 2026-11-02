@@ -12,6 +12,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.js" integrity="sha384-TcHRA3zBbn+Lexh5n+Oil4guNPOS3rjNDpGRAN46u/s/mB2IZ50ceC6TYDU2yvgK" crossorigin="anonymous"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 body{
@@ -2400,39 +2401,36 @@ const SB_URL = "https://eiodeeugxtbbcpclxtyc.supabase.co";
 const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVpb2RlZXVneHRiYmNwY2x4dHljIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI0MDY5ODcsImV4cCI6MjA5Nzk4Mjk4N30.h2y3Kj5WNKz8sa0W2RD1O1uO1mN7PWVegoFUPGNkcvg";
 const SB_STORE_ID = "main"; // ID записи в таблице
 
-const sbHeaders = {
-  "Content-Type": "application/json",
-  "apikey": SB_KEY,
-  "Authorization": "Bearer " + SB_KEY,
-  "Prefer": "return=representation"
-};
+const sbClient = window.supabase.createClient(SB_URL, SB_KEY);
 
-async function sbInit(){
-  // Создаём таблицу если не существует через SQL (rpc)
-  try{
-    await fetch(`${SB_URL}/rest/v1/ttk_data?id=eq.${SB_STORE_ID}`, {
-      headers: {...sbHeaders, "Prefer": "return=minimal"}
-    });
-  }catch{}
+// Запросы идут от имени вошедшего пользователя: без входа база данные не отдаёт и не принимает
+async function sbHeaders(){
+  const {data} = await sbClient.auth.getSession();
+  if(!data.session) throw new Error("Нужно войти заново");
+  return {
+    "Content-Type": "application/json",
+    "apikey": SB_KEY,
+    "Authorization": "Bearer " + data.session.access_token,
+    "Prefer": "return=representation"
+  };
 }
 
+// Любой сбой здесь — ошибка, а не «база пуста»: иначе старая копия из браузера запишется поверх ТТК
 async function sbLoad(){
-  try{
-    const r = await fetch(`${SB_URL}/rest/v1/ttk_data?id=eq.${SB_STORE_ID}`, {
-      headers: sbHeaders
-    });
-    if(!r.ok) return null;
-    const rows = await r.json();
-    if(!rows || !rows.length) return null;
-    return rows[0].payload;
-  }catch{ return null; }
+  const r = await fetch(`${SB_URL}/rest/v1/ttk_data?id=eq.${SB_STORE_ID}`, {
+    headers: await sbHeaders()
+  });
+  if(!r.ok) throw new Error("Ошибка загрузки: " + r.status);
+  const rows = await r.json();
+  if(!rows || !rows.length) throw new Error("Нет доступа к данным ТТК");
+  return rows[0].payload;
 }
 
 async function sbSave(data){
   // Upsert — создаёт или обновляет запись
   const r = await fetch(`${SB_URL}/rest/v1/ttk_data`, {
     method: "POST",
-    headers: {...sbHeaders, "Prefer": "resolution=merge-duplicates,return=minimal"},
+    headers: {...await sbHeaders(), "Prefer": "resolution=merge-duplicates,return=minimal"},
     body: JSON.stringify({id: SB_STORE_ID, payload: data, updated_at: new Date().toISOString()})
   });
   if(!r.ok){
@@ -2445,43 +2443,28 @@ async function sbSave(data){
   }
 }
 
-async function sbCreateTable(){
-  // Создаём таблицу через SQL API
-  const sql = `
-    CREATE TABLE IF NOT EXISTS ttk_data (
-      id TEXT PRIMARY KEY,
-      payload JSONB NOT NULL,
-      updated_at TIMESTAMPTZ DEFAULT NOW()
-    );
-  `;
-  const r = await fetch(`${SB_URL}/rest/v1/rpc/exec_sql`, {
-    method: "POST",
-    headers: sbHeaders,
-    body: JSON.stringify({sql})
-  });
-  return r.ok;
-}
-
 // ════════════════════ ROOT APP ════════════════════
 
 // ════════════════════ ЭКРАН ВХОДА ════════════════════
-const PASSWORD_HASH = "ttksushi2026"; // простой пароль — смените на свой
-// Для смены пароля: измените строку выше на любое слово/фразу
-
-function LoginScreen({onLogin}){
+function LoginScreen(){
+  const [email, setEmail] = useState("");
   const [pwd, setPwd] = useState("");
-  const [error, setError] = useState(false);
+  const [error, setError] = useState("");
   const [show, setShow] = useState(false);
+  const [busy, setBusy] = useState(false);
 
-  function tryLogin(){
-    if(pwd === PASSWORD_HASH){
-      try{ localStorage.setItem("ttk_auth", "1"); }catch{}
-      onLogin();
-    } else {
-      setError(true);
-      setTimeout(()=>setError(false), 1500);
+  async function tryLogin(){
+    if(busy) return;
+    setBusy(true);
+    setError("");
+    const {error} = await sbClient.auth.signInWithPassword({email:email.trim(), password:pwd});
+    if(error){
+      setError(error.code==="invalid_credentials"
+        ? "Неверный email или пароль"
+        : "Не удалось войти. Проверьте интернет и попробуйте ещё раз");
       setPwd("");
     }
+    setBusy(false);
   }
 
   return <div style={{
@@ -2521,16 +2504,33 @@ function LoginScreen({onLogin}){
         <div style={{
           fontSize:13, color:C.muted, marginBottom:20,
           textAlign:"center", fontWeight:500
-        }}>Введите пароль для доступа</div>
+        }}>Введите email и пароль</div>
+
+        <input
+          type="email"
+          autoComplete="username"
+          value={email}
+          onChange={e=>{setEmail(e.target.value); setError("");}}
+          onKeyDown={e=>e.key==="Enter"&&tryLogin()}
+          placeholder="Email"
+          autoFocus
+          style={{
+            width:"100%", padding:"13px 16px", marginBottom:12,
+            fontSize:16, borderRadius:12,
+            background:C.surface,
+            border:`1px solid ${C.border}`,
+            color:C.text, outline:"none"
+          }}
+        />
 
         <div style={{position:"relative", marginBottom:12}}>
           <input
             type={show?"text":"password"}
+            autoComplete="current-password"
             value={pwd}
-            onChange={e=>{setPwd(e.target.value); setError(false);}}
+            onChange={e=>{setPwd(e.target.value); setError("");}}
             onKeyDown={e=>e.key==="Enter"&&tryLogin()}
             placeholder="Пароль"
-            autoFocus
             style={{
               width:"100%", padding:"13px 44px 13px 16px",
               fontSize:16, borderRadius:12,
@@ -2553,16 +2553,16 @@ function LoginScreen({onLogin}){
           background:C.accentSoft, border:`1px solid ${C.accent}44`,
           borderRadius:8, padding:"8px 12px", fontSize:13,
           color:C.accent, textAlign:"center", marginBottom:12
-        }}>Неверный пароль</div>}
+        }}>{error}</div>}
 
-        <button onClick={tryLogin} style={{
+        <button onClick={tryLogin} disabled={busy} style={{
           width:"100%", padding:"13px",
           background:`linear-gradient(135deg,${C.green},${C.teal})`,
           color:"#08090f", border:"none", borderRadius:12,
           fontSize:15, fontWeight:700, cursor:"pointer",
           boxShadow:`0 4px 20px ${C.green}44`,
           transition:"opacity .15s"
-        }}>Войти</button>
+        }}>{busy?"Вход…":"Войти"}</button>
       </div>
 
       <div style={{
@@ -2574,9 +2574,12 @@ function LoginScreen({onLogin}){
 }
 
 function App(){
-  const [authed, setAuthed] = useState(()=>{
-    try{ return localStorage.getItem("ttk_auth")==="1"; }catch{ return false; }
-  });
+  const [authed, setAuthed] = useState(null); // null — ещё проверяем вход
+  useEffect(()=>{
+    sbClient.auth.getSession().then(({data})=>setAuthed(!!data.session));
+    const {data} = sbClient.auth.onAuthStateChange((_event,session)=>setAuthed(!!session));
+    return ()=>data.subscription.unsubscribe();
+  },[]);
   const [state, setState]      = useState({products:[],semis:[],dishes:[]});
   const [appReady, setReady]   = useState(false);
   const [tab, setTab]          = useState("products");
@@ -2589,6 +2592,7 @@ function App(){
   const isFirstState = useRef(true);
   const skipSave     = useRef(false);
   const lastSbTs     = useRef(0);
+  const loadFailed   = useRef(false); // база не загрузилась: на экране старая копия, сохранять её нельзя
 
   // ── Офлайн режим ──
   const [isOnline, setIsOnline] = useState(()=>{
@@ -2626,6 +2630,7 @@ function App(){
 
   // ── Загрузка при старте ──
   useEffect(()=>{
+    if(!authed || appReady) return;
     (async()=>{
       setSync("loading");
 
@@ -2662,6 +2667,7 @@ function App(){
           setSync("idle");
         }
       }catch(e){
+        loadFailed.current = true;
         if(e.message==="TABLE_NOT_FOUND"){
           setSbError("table");
           setShowSetup(true);
@@ -2679,13 +2685,19 @@ function App(){
       }
       setReady(true);
     })();
-  },[]);
+  },[authed]);
 
   // ── Автосохранение ──
   useEffect(()=>{
     if(!appReady) return;
     if(isFirstState.current){ isFirstState.current=false; return; }
     if(skipSave.current){ skipSave.current=false; return; }
+
+    if(loadFailed.current){
+      setSbError("Нет связи с базой, изменения не сохраняются. Дождитесь связи или обновите страницу");
+      setSync("error");
+      return;
+    }
 
     // Всегда сохраняем локально (работает офлайн)
     LS.set("products",state.products);
@@ -2741,6 +2753,8 @@ function App(){
       try{
         const sbData = await sbLoad();
         if(sbData && sbData.ts && sbData.ts > lastSbTs.current + 500){
+          loadFailed.current = false;
+          setSbError("");
           lastSbTs.current = sbData.ts;
           skipSave.current = true;
           isFirstState.current = true;
@@ -2763,6 +2777,11 @@ function App(){
 
   // ── Ручная синхронизация ──
   async function manualSync(){
+    if(loadFailed.current){
+      setSbError("Нет связи с базой, сохранить нельзя. Обновите страницу");
+      setSync("error");
+      return;
+    }
     setSync("saving");
     try{
       const ts = Date.now();
@@ -2895,7 +2914,7 @@ function App(){
     {id:"dishes",  label:"Готовые блюда",         icon:"🍱"},
   ];
 
-  if(!authed) return <LoginScreen onLogin={()=>setAuthed(true)}/>;
+  if(authed===false) return <LoginScreen/>;
 
   if(!appReady) return <div style={{minHeight:"100vh",display:"flex",alignItems:"center",
     justifyContent:"center",flexDirection:"column",gap:20,background:C.bg}}>
@@ -2949,10 +2968,7 @@ function App(){
         <button onClick={manualSync} title="Синхронизировать" style={{
           background:"transparent",border:`1px solid ${C.border}`,
           borderRadius:10,padding:"7px 10px",fontSize:14,color:C.muted}}>🔄</button>
-        <button onClick={()=>{
-          try{localStorage.removeItem("ttk_auth");}catch{}
-          setAuthed(false);
-        }} style={{
+        <button onClick={()=>sbClient.auth.signOut()} style={{
           background:"transparent",border:`1px solid ${C.border}`,
           borderRadius:10,padding:"7px 14px",fontSize:12,
           color:C.muted,fontWeight:600}}>Выйти</button>
@@ -2962,7 +2978,7 @@ function App(){
           background:sync==="offline"?`${C.yellow}15`:sync==="saved"||sync==="synced"?`${C.green}15`:"transparent",
           border:`1px solid ${sync==="offline"?C.yellow+"66":sync==="saved"||sync==="synced"?C.green+"44":sync==="saving"?C.yellow+"44":sync==="error"?C.accent+"44":C.border}`,
           borderRadius:20,padding:"6px 12px",transition:"all .3s",cursor:sync==="error"?"pointer":"default"}}
-          onClick={sync==="error"?()=>setShowSetup(true):undefined}
+          onClick={sync==="error"&&sbError==="table"?()=>setShowSetup(true):undefined}
           title={sync==="offline"?"Нет интернета — изменения сохранятся локально и синхронизируются автоматически":(sbError||"Supabase")}>
           <span style={{
             width:7,height:7,borderRadius:"50%",flexShrink:0,
@@ -2982,6 +2998,11 @@ function App(){
         <input ref={importRef} type="file" accept=".json" onChange={handleImportFile} style={{display:"none"}}/>
       </div>
     </div>
+
+    {sync==="error"&&sbError&&sbError!=="table"&&<div style={{
+      background:C.accentSoft,borderBottom:`1px solid ${C.accent}44`,
+      padding:"10px 16px",fontSize:13,color:C.accent,textAlign:"center"
+    }}>{sbError}</div>}
 
     {/* ══ МОДАЛ: Настройка таблицы Supabase ══ */}
     {showSetup&&<Modal title="⚙️ Настройка Supabase" onClose={()=>setShowSetup(false)} width={500}>
