@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<meta name="theme-color" content="#0D0F0B"/>
+<meta name="theme-color" content="#F6F7F3"/>
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="ТТК Суши"/>
@@ -16,7 +16,7 @@
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 body{
-  background:#0D0F0B;color:#F0F2EC;
+  background:#F6F7F3;color:#1C1F17;
   font-family:'Inter',sans-serif;font-size:14px;
   background-image:
     radial-gradient(ellipse 900px 600px at 0% 0%, rgba(74,222,128,.04), transparent),
@@ -25,24 +25,24 @@ body{
   background-attachment:fixed;
 }
 ::-webkit-scrollbar{width:4px;height:4px}
-::-webkit-scrollbar-track{background:#161810}
-::-webkit-scrollbar-thumb{background:#2D3028;border-radius:2px}
-::-webkit-scrollbar-thumb:hover{background:#4ADE80}
+::-webkit-scrollbar-track{background:#EEF0EA}
+::-webkit-scrollbar-thumb{background:#C9CEC1;border-radius:2px}
+::-webkit-scrollbar-thumb:hover{background:#16A34A}
 input,select,textarea{
-  background:#161810;color:#F0F2EC;border:1px solid #2D3028;
+  background:#FFFFFF;color:#1C1F17;border:1px solid #DDE1D6;
   border-radius:10px;padding:10px 14px;font-family:'Inter',sans-serif;
   font-size:14px;outline:none;width:100%;transition:border-color .2s,box-shadow .2s;
 }
-input:focus,select:focus,textarea:focus{border-color:#4ADE80;box-shadow:0 0 0 3px rgba(74,222,128,.12)}
+input:focus,select:focus,textarea:focus{border-color:#16A34A;box-shadow:0 0 0 3px rgba(22,163,74,.15)}
 button{cursor:pointer;font-family:'Inter',sans-serif;border:none;border-radius:10px;transition:all .15s}
 button:hover{opacity:.88}
 button:active{transform:scale(.97)}
 table{width:100%;border-collapse:collapse}
-th{text-align:left;font-size:10px;color:#6B7260;font-weight:700;text-transform:uppercase;
-  letter-spacing:1px;padding:10px 14px;border-bottom:1px solid #1E2019;white-space:nowrap}
-td{padding:13px 14px;border-bottom:1px solid #181A14;font-size:13px}
+th{text-align:left;font-size:10px;color:#5F6655;font-weight:700;text-transform:uppercase;
+  letter-spacing:1px;padding:10px 14px;border-bottom:1px solid #E4E7DF;white-space:nowrap}
+td{padding:13px 14px;border-bottom:1px solid #EEF0EA;font-size:13px}
 tr:last-child td{border-bottom:none}
-tr:hover td{background:#161810}
+tr:hover td{background:#F1F3EE}
 @media(max-width:768px){td,th{padding:8px 10px;font-size:12px}}
 @keyframes spin{to{transform:rotate(360deg)}}
 @keyframes float{0%,100%{transform:translateY(0) rotate(0deg)}50%{transform:translateY(-8px) rotate(5deg)}}
@@ -68,14 +68,14 @@ const {useState,useCallback,useEffect,useRef}=React;
 
 // ════════════════════ ПАЛИТРА ════════════════════
 const C={
-  bg:"#0D0F0B",surface:"#161810",card:"#1A1C16",border:"#2D3028",
-  accent:"#FF4D4D",accentSoft:"#2A1010",
-  green:"#4ADE80",greenSoft:"#0A2016",
-  yellow:"#F5C842",yellowSoft:"#2A2208",
-  blue:"#60A5FA",blueSoft:"#0A1828",
-  purple:"#C084FC",purpleSoft:"#1A0828",
-  teal:"#34D399",tealSoft:"#052018",
-  text:"#F0F2EC",muted:"#6B7260",tag:"#1E2019",
+  bg:"#F6F7F3",surface:"#FFFFFF",card:"#FFFFFF",border:"#DDE1D6",
+  accent:"#E03131",accentSoft:"#FDECEC",
+  green:"#16A34A",greenSoft:"#E8F7EE",
+  yellow:"#B7791F",yellowSoft:"#FFF6DB",
+  blue:"#2563EB",blueSoft:"#E8F0FE",
+  purple:"#9333EA",purpleSoft:"#F3E8FF",
+  teal:"#0F9F7A",tealSoft:"#E3F6F0",
+  text:"#1C1F17",muted:"#5F6655",tag:"#EEF0EA",
 };
 
 // ════════════════════ % УТИЛИТЫ ════════════════════
@@ -417,7 +417,7 @@ function Btn({children,onClick,variant="primary",size="md",style,disabled}){
     padding:size==="sm"?"5px 12px":"9px 18px",fontSize:size==="sm"?12:14,fontWeight:700,opacity:disabled?.4:1,...style}}>{children}</button>;
 }
 function Modal({title,onClose,children,width=520}){
-  return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.85)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:300,padding:16,overflowY:"auto"}}>
+  return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.45)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:300,padding:16,overflowY:"auto"}}>
     <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:16,padding:24,width:"100%",maxWidth:width,maxHeight:"92vh",overflowY:"auto",margin:"auto"}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
         <h3 style={{fontWeight:700,fontSize:17}}>{title}</h3>
@@ -2935,11 +2935,11 @@ function App(){
 
   return <div style={{minHeight:"100vh"}}>
     {/* ══ ШАПКА ══ */}
-    <div style={{background:`linear-gradient(135deg,#111310,#0D0F0B)`,
+    <div style={{background:`linear-gradient(135deg,#FFFFFF,#F6F7F3)`,
       borderBottom:`1px solid ${C.border}`,
       padding:"0 16px",height:60,display:"flex",alignItems:"center",justifyContent:"space-between",
       position:"sticky",top:0,zIndex:50,
-      boxShadow:"0 1px 0 #1E2019, 0 4px 24px rgba(0,0,0,.5)",gap:8,overflow:"hidden"}}>
+      boxShadow:"0 1px 0 #E4E7DF, 0 4px 24px rgba(0,0,0,.06)",gap:8,overflow:"hidden"}}>
 
       {/* Плавающие ингредиенты фоном */}
       <span className="header-ingredient hi-1">🐟</span>
@@ -3011,7 +3011,7 @@ function App(){
         <b>Нужно создать таблицу в Supabase!</b><br/>
         Откройте Supabase → ваш проект → <b>SQL Editor</b> → вставьте SQL ниже → нажмите <b>Run</b>
       </div>
-      <div style={{background:"#0a0a14",borderRadius:10,padding:14,marginBottom:14,
+      <div style={{background:"#F1F3EE",borderRadius:10,padding:14,marginBottom:14,
         border:`1px solid ${C.border}`,fontFamily:"monospace",fontSize:12,color:C.teal,lineHeight:1.8,
         userSelect:"all",cursor:"text"}}>
         {`CREATE TABLE IF NOT EXISTS ttk_data (\n  id TEXT PRIMARY KEY,\n  payload JSONB NOT NULL,\n  updated_at TIMESTAMPTZ DEFAULT NOW()\n);\n\nALTER TABLE ttk_data ENABLE ROW LEVEL SECURITY;\n\nCREATE POLICY "allow_all" ON ttk_data\n  FOR ALL USING (true) WITH CHECK (true);`}
