@@ -1276,6 +1276,59 @@ function SemisTab({state,dispatch}){
 
 // ════════════════════ ТАБ: ГОТОВЫЕ БЛЮДА ════════════════════
 // ══════════ КАРТОЧКА СОСТАВА БЛЮДА ══════════
+// ════════════════════ ТЕХКАРТА ДЛЯ ПОВАРА ════════════════════
+// Печатная техкарта блюда без цен: состав, полуфабрикаты, вложенные блюда, добавки, упаковка
+function cookCardHtml(dish,products,semis,dishes){
+  const esc=s=>String(s??"").trim().replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+  const num=n=>Number(n||0).toLocaleString("ru",{maximumFractionDigits:1});
+  const qtyText=q=>q===0.5?"½":q===0.25?"¼":num(q);
+  const isSet=isSetCat(dish.category);
+  const prodOf=id=>products.find(p=>p.id===id);
+  const semiOf=id=>semis.find(s=>s.id===id);
+  const dishOf=id=>dishes.find(d=>d.id===id);
+  const semiOut=s=>s.outputQtyOverride||semiTotalInputQty(s)||s.outputQty||0;
+  // Сырьё блюда одной строкой, с множителем k (для вложенных блюд)
+  const ingrLine=(d,k)=>[
+    ...(d.productLines||[]).map(r=>{const p=prodOf(r.productId);return p&&p.category!=="Упаковка"?esc(p.name)+" "+num(netto(r.brutto,r.loss)*k)+" "+esc(p.unit):null;}),
+    ...(d.semiLines||[]).map(r=>{const s=semiOf(r.semiId);return s?"п/ф "+esc(s.name)+" "+num(r.qty*k)+" "+esc(s.outputUnit||"г"):null;})
+  ].filter(Boolean).join("; ");
+  // Состав полуфабриката на нужное количество
+  const semiLine=(s,qty)=>{const out=semiOut(s); if(!out)return ""; const k=qty/out;
+    return [...(s.composition||[]).map(c=>{const p=prodOf(c.productId);return p?esc(p.name)+" "+num(c.qty*k)+" "+esc(p.unit):null;}),
+      ...(s.semiLines||[]).map(r=>{const s2=semiOf(r.semiId);return s2?"п/ф "+esc(s2.name)+" "+num(r.qty*k)+" "+esc(s2.outputUnit||"г"):null;})].filter(Boolean).join("; ");};
+  const lines=(dish.dishLines||[]).map(r=>({r,d:dishOf(r.dishId)})).filter(x=>x.d);
+  const parts=lines.filter(x=>x.d.category!=="Соуса"); const addons=lines.filter(x=>x.d.category==="Соуса");
+  const prodRows=(dish.productLines||[]).map(r=>({r,p:prodOf(r.productId)})).filter(x=>x.p&&x.p.category!=="Упаковка");
+  const semiRows=(dish.semiLines||[]).map(r=>({r,s:semiOf(r.semiId)})).filter(x=>x.s);
+  const pack=[...(dish.packLines||[]).map(r=>({p:prodOf(r.productId),q:r.qty})),...(dish.productLines||[]).map(r=>({p:prodOf(r.productId),q:r.brutto})).filter(x=>x.p&&x.p.category==="Упаковка")].filter(x=>x.p);
+  const weight=dish.weightOverride||dishWeight(dish,dishes);
+  const pcs=isRollCat(dish.category)?rollPcs(dish.category):null;
+  const partW=x=>((x.d.weightOverride||dishWeight(x.d,dishes))-(isSet?dishAddonWeight(x.d,dishes):0))*x.r.qty;
+  const blank=n=>Array.from({length:n},()=>'<div class="line"></div>').join("");
+  let h='<!doctype html><html lang="ru"><head><meta charset="utf-8"><title>Техкарта — '+esc(dish.name)+'</title><style>@page{size:A4;margin:14mm}*{box-sizing:border-box}body{font-family:Arial,sans-serif;font-size:13px;color:#111;margin:0;padding:16px;background:#fff}.bar{display:flex;gap:8px;margin-bottom:14px}.bar button{font:inherit;font-weight:700;padding:8px 14px;border-radius:8px;border:1px solid #bbb;background:#f3f4f0;cursor:pointer}.bar button.main{background:#16A34A;border-color:#16A34A;color:#fff}.top{border-bottom:2.5px solid #111;padding-bottom:6px;margin-bottom:10px}.brand{font-size:10px;letter-spacing:2px;color:#666}h1{font-size:22px;margin:3px 0}.meta{font-size:12px;color:#333}h2{font-size:14px;margin:14px 0 6px;border-left:4px solid #111;padding-left:7px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #999;padding:5px 7px;text-align:left;vertical-align:top}th{background:#eee;font-size:11px;text-transform:uppercase}td.n,th.n{text-align:right;white-space:nowrap}.small{font-size:11px;color:#444}ul{margin:0;padding-left:18px;line-height:1.45}.line{border-bottom:1px solid #aaa;height:24px}.sign{display:flex;justify-content:space-between;margin-top:22px;font-size:12px}.sign div{width:45%;border-top:1px solid #555;padding-top:3px}@media print{.bar{display:none}body{padding:0}}</style></head><body>';
+  h+='<div class="bar"><button class="main" onclick="window.print()">🖨 Печать / PDF</button><button onclick="window.close()">Закрыть</button></div><div class="top"><div class="brand">СУШИ-БАР «ТОКИО» · ТЕХКАРТА ДЛЯ ПОВАРА</div><h1>'+esc(dish.name)+'</h1><div class="meta">'+esc(dish.category)+' · выход ≈ '+num(weight)+' г'+(pcs?' · нарезка '+pcs+' шт':'')+' · '+new Date().toLocaleDateString("ru")+'</div></div>';
+  if(parts.length){h+='<h2>Состав</h2><table><tr><th>№</th><th>Позиция</th><th class="n">Кол-во</th><th class="n">Нарезка</th><th class="n">Выход, г</th></tr>';
+    parts.forEach((x,i)=>{h+='<tr><td>'+(i+1)+'</td><td>'+esc(x.d.name)+'</td><td class="n">'+qtyText(x.r.qty)+'</td><td class="n">'+(x.r.cutPcs?x.r.cutPcs+' шт':'—')+'</td><td class="n">'+num(partW(x))+'</td></tr>';});
+    h+='</table><h2>Из чего собрать позиции</h2><ul>';
+    parts.forEach(x=>{const t=ingrLine(x.d,x.r.qty);if(t)h+='<li><b>'+esc(x.d.name)+'</b>'+(x.r.qty!==1?' ('+qtyText(x.r.qty)+')':'')+': '+t+'</li>';});
+    h+='</ul>';}
+  if(prodRows.length){h+='<h2>Сырьё</h2><table><tr><th>Продукт</th><th class="n">Брутто</th><th class="n">Нетто</th><th>Ед.</th></tr>';
+    prodRows.forEach(({r,p})=>{h+='<tr><td>'+esc(p.name)+(r.pcs?' <span class="small">('+num(r.pcs)+' шт)</span>':'')+'</td><td class="n">'+num(r.brutto)+'</td><td class="n">'+num(netto(r.brutto,r.loss))+'</td><td>'+esc(p.unit)+'</td></tr>';});
+    h+='</table>';}
+  if(semiRows.length){h+='<h2>Полуфабрикаты</h2><table><tr><th>Полуфабрикат</th><th class="n">Кол-во</th><th>Из чего (на это количество)</th></tr>';
+    semiRows.forEach(({r,s})=>{h+='<tr><td>'+esc(s.name)+'</td><td class="n">'+num(r.qty)+' '+esc(s.outputUnit||"г")+'</td><td class="small">'+semiLine(s,r.qty)+'</td></tr>';});
+    h+='</table>';}
+  if(addons.length){h+='<h2>Добавки</h2><ul>';addons.forEach(x=>{h+='<li>'+esc(x.d.name)+' × '+num(x.r.qty)+'</li>';});h+='</ul>';}
+  if(pack.length){h+='<h2>Упаковка</h2><ul>';pack.forEach(x=>{h+='<li>'+esc(x.p.name)+' × '+num(x.q)+'</li>';});h+='</ul>';}
+  h+='<h2>Технология приготовления</h2>'+blank(5)+'<h2>Подача</h2>'+blank(2)+'<div class="sign"><div>Составил</div><div>Утвердил</div></div></body></html>';
+  return h;
+}
+function openCookCard(dish,products,semis,dishes){
+  const w=window.open("","_blank");
+  if(!w){alert("Разрешите всплывающие окна для этого сайта");return;}
+  w.document.open();w.document.write(cookCardHtml(dish,products,semis,dishes));w.document.close();
+}
+
 function DishDetailCard({dish,products,semis,dishes,cost,weight}){
   // Продукты в составе
   const prodRows=(dish.productLines||[]).map(r=>{
@@ -1744,6 +1797,7 @@ function DishesTab({state,dispatch}){
                 </td>
                 <td>
                   <div style={{display:"flex",gap:4}} onClick={e=>e.stopPropagation()}>
+                    <Btn size="sm" variant="outline" onClick={()=>openCookCard(d,products,semis,dishes)}>🧾</Btn>
                     <Btn size="sm" variant="outline" onClick={()=>openEdit(d)}>✏</Btn>
                     <Btn size="sm" variant="danger" onClick={()=>del(d.id)}>✕</Btn>
                   </div>
