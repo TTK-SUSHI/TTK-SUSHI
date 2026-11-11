@@ -2708,7 +2708,6 @@ function App(){
           // Supabase содержит данные — используем их ВСЕГДА
           // SEED_PRODUCTS никогда не перезаписывает данные из Supabase
           lastSbTs.current = sbData.ts||0;
-          skipSave.current = true;
           isFirstState.current = true;
           const loaded = {
             products: sbData.products || [],
@@ -2823,7 +2822,6 @@ function App(){
           loadFailed.current = false;
           setSbError("");
           lastSbTs.current = sbData.ts;
-          skipSave.current = true;
           isFirstState.current = true;
           setState({
             products: sbData.products||[],
