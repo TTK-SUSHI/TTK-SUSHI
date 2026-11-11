@@ -1277,16 +1277,19 @@ function SemisTab({state,dispatch}){
 // ════════════════════ ТАБ: ГОТОВЫЕ БЛЮДА ════════════════════
 // ══════════ КАРТОЧКА СОСТАВА БЛЮДА ══════════
 // ════════════════════ ТЕХКАРТА ДЛЯ ПОВАРА ════════════════════
-// Печатная техкарта блюда без цен: состав, полуфабрикаты, вложенные блюда, добавки, упаковка
+// Печатная техкарта блюда в двух видах: без цен (для повара) и с ценами (себестоимость, фудкост)
 function cookCardHtml(dish,products,semis,dishes){
   const esc=s=>String(s??"").trim().replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
   const num=n=>Number(n||0).toLocaleString("ru",{maximumFractionDigits:1});
+  const money=n=>Number(n||0).toLocaleString("ru",{maximumFractionDigits:2});
   const qtyText=q=>q===0.5?"½":q===0.25?"¼":num(q);
   const isSet=isSetCat(dish.category);
   const prodOf=id=>products.find(p=>p.id===id);
   const semiOf=id=>semis.find(s=>s.id===id);
   const dishOf=id=>dishes.find(d=>d.id===id);
   const semiOut=s=>s.outputQtyOverride||semiTotalInputQty(s)||s.outputQty||0;
+  // Цена продукта за кг / л / шт, как её вводят в справочнике
+  const unitPrice=p=>{const k=(p.unit==="г"||p.unit==="мл")&&(p.priceFor==="кг"||p.priceFor==="л")?1000:1;return money(productUnitCost(p)*k)+" ₸/"+esc(p.priceFor||p.unit);};
   // Сырьё блюда одной строкой, с множителем k (для вложенных блюд)
   const ingrLine=(d,k)=>[
     ...(d.productLines||[]).map(r=>{const p=prodOf(r.productId);return p&&p.category!=="Упаковка"?esc(p.name)+" "+num(netto(r.brutto,r.loss)*k)+" "+esc(p.unit):null;}),
@@ -1304,29 +1307,39 @@ function cookCardHtml(dish,products,semis,dishes){
   const weight=dish.weightOverride||dishWeight(dish,dishes);
   const pcs=isRollCat(dish.category)?rollPcs(dish.category):null;
   const partW=x=>((x.d.weightOverride||dishWeight(x.d,dishes))-(isSet?dishAddonWeight(x.d,dishes):0))*x.r.qty;
+  const partCost=x=>(dishCost(x.d,products,semis,dishes)-(isSet?dishPackagingCost(x.d,products)+dishAddonCost(x.d,products,semis,dishes):0))*x.r.qty;
+  const total=dishCost(dish,products,semis,dishes), packCost=dishPackagingCost(dish,products), addCost=dishAddonCost(dish,products,semis,dishes);
+  const price=+dish.price>1?+dish.price:0, fc=price?total/price*100:0;
   const blank=n=>Array.from({length:n},()=>'<div class="line"></div>').join("");
-  let h='<!doctype html><html lang="ru"><head><meta charset="utf-8"><title>Техкарта — '+esc(dish.name)+'</title><style>@page{size:A4;margin:14mm}*{box-sizing:border-box}body{font-family:Arial,sans-serif;font-size:13px;color:#111;margin:0;padding:16px;background:#fff}.bar{display:flex;gap:8px;margin-bottom:14px}.bar button{font:inherit;font-weight:700;padding:8px 14px;border-radius:8px;border:1px solid #bbb;background:#f3f4f0;cursor:pointer}.bar button.main{background:#16A34A;border-color:#16A34A;color:#fff}.top{border-bottom:2.5px solid #111;padding-bottom:6px;margin-bottom:10px}.brand{font-size:10px;letter-spacing:2px;color:#666}h1{font-size:22px;margin:3px 0}.meta{font-size:12px;color:#333}h2{font-size:14px;margin:14px 0 6px;border-left:4px solid #111;padding-left:7px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #999;padding:5px 7px;text-align:left;vertical-align:top}th{background:#eee;font-size:11px;text-transform:uppercase}td.n,th.n{text-align:right;white-space:nowrap}.small{font-size:11px;color:#444}ul{margin:0;padding-left:18px;line-height:1.45}.line{border-bottom:1px solid #aaa;height:24px}.sign{display:flex;justify-content:space-between;margin-top:22px;font-size:12px}.sign div{width:45%;border-top:1px solid #555;padding-top:3px}@media print{.bar{display:none}body{padding:0}}</style></head><body>';
-  h+='<div class="bar"><button class="main" onclick="window.print()">🖨 Печать / PDF</button><button onclick="window.close()">Закрыть</button></div><div class="top"><div class="brand">СУШИ-БАР «ТОКИО» · ТЕХКАРТА ДЛЯ ПОВАРА</div><h1>'+esc(dish.name)+'</h1><div class="meta">'+esc(dish.category)+' · выход ≈ '+num(weight)+' г'+(pcs?' · нарезка '+pcs+' шт':'')+' · '+new Date().toLocaleDateString("ru")+'</div></div>';
-  if(parts.length){h+='<h2>Состав</h2><table><tr><th>№</th><th>Позиция</th><th class="n">Кол-во</th><th class="n">Нарезка</th><th class="n">Выход, г</th></tr>';
-    parts.forEach((x,i)=>{h+='<tr><td>'+(i+1)+'</td><td>'+esc(x.d.name)+'</td><td class="n">'+qtyText(x.r.qty)+'</td><td class="n">'+(x.r.cutPcs?x.r.cutPcs+' шт':'—')+'</td><td class="n">'+num(partW(x))+'</td></tr>';});
+  let h='<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Техкарта — '+esc(dish.name)+'</title><style>@page{size:A4;margin:14mm}*{box-sizing:border-box}body{font-family:Arial,sans-serif;font-size:13px;color:#111;margin:0;padding:16px;background:#fff}.bar{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}.bar button{font:inherit;font-weight:700;padding:8px 14px;border-radius:8px;border:1px solid #bbb;background:#f3f4f0;color:#111;cursor:pointer}.bar button.main{background:#16A34A;border-color:#16A34A;color:#fff}body:not(.showprice) #bN,body.showprice #bP{background:#1C1F17;border-color:#1C1F17;color:#fff}body:not(.showprice) .pr{display:none}body.showprice .np{display:none}.top{border-bottom:2.5px solid #111;padding-bottom:6px;margin-bottom:10px}.brand{font-size:10px;letter-spacing:2px;color:#666}h1{font-size:22px;margin:3px 0}.meta{font-size:12px;color:#333}.kpi{display:flex;gap:8px;margin:10px 0}.kpi div{flex:1;border:1px solid #bbb;border-radius:6px;padding:6px 8px;font-size:10px;color:#555;text-transform:uppercase}.kpi b{display:block;font-size:16px;color:#111;margin-top:2px;text-transform:none}h2{font-size:14px;margin:14px 0 6px;border-left:4px solid #111;padding-left:7px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #999;padding:5px 7px;text-align:left;vertical-align:top}th{background:#eee;font-size:11px;text-transform:uppercase}td.n,th.n{text-align:right;white-space:nowrap}tr.tot td{font-weight:700;background:#f4f4f4}.small{font-size:11px;color:#444}ul{margin:0;padding-left:18px;line-height:1.45}.line{border-bottom:1px solid #aaa;height:24px}.sign{display:flex;justify-content:space-between;margin-top:22px;font-size:12px}.sign div{width:45%;border-top:1px solid #555;padding-top:3px}@media print{.bar{display:none}body{padding:0}}</style></head><body>';
+  h+='<div class="bar"><button id="bN" onclick="document.body.classList.remove(&quot;showprice&quot;)">Без цен (повару)</button><button id="bP" onclick="document.body.classList.add(&quot;showprice&quot;)">С ценами</button><button class="main" onclick="window.print()">🖨 Печать / PDF</button><button onclick="parent.document.getElementById(&quot;cookCardFrame&quot;).remove()">✕ Закрыть</button></div>';
+  h+='<div class="top"><div class="brand">СУШИ-БАР «ТОКИО» · <span class="np">ТЕХКАРТА ДЛЯ ПОВАРА</span><span class="pr">ТЕХНОЛОГИЧЕСКАЯ КАРТА С ЦЕНАМИ</span></div><h1>'+esc(dish.name)+'</h1><div class="meta">'+esc(dish.category)+' · выход ≈ '+num(weight)+' г'+(pcs?' · нарезка '+pcs+' шт':'')+' · '+new Date().toLocaleDateString("ru")+'</div></div>';
+  h+='<div class="kpi pr"><div>Себестоимость<b>'+money(total)+' ₸</b></div>'+(price?'<div>Цена продажи<b>'+money(price)+' ₸</b></div><div>Фудкост<b>'+num(fc)+'%</b></div><div>Остаётся<b>'+money(price-total)+' ₸</b></div>':'')+'</div>';
+  if(parts.length){h+='<h2>Состав</h2><table><tr><th>№</th><th>Позиция</th><th class="n">Кол-во</th><th class="n">Нарезка</th><th class="n">Выход, г</th><th class="n pr">Себест., ₸</th></tr>';
+    parts.forEach((x,i)=>{h+='<tr><td>'+(i+1)+'</td><td>'+esc(x.d.name)+'</td><td class="n">'+qtyText(x.r.qty)+'</td><td class="n">'+(x.r.cutPcs?x.r.cutPcs+' шт':'—')+'</td><td class="n">'+num(partW(x))+'</td><td class="n pr">'+money(partCost(x))+'</td></tr>';});
     h+='</table><h2>Из чего собрать позиции</h2><ul>';
     parts.forEach(x=>{const t=ingrLine(x.d,x.r.qty);if(t)h+='<li><b>'+esc(x.d.name)+'</b>'+(x.r.qty!==1?' ('+qtyText(x.r.qty)+')':'')+': '+t+'</li>';});
     h+='</ul>';}
-  if(prodRows.length){h+='<h2>Сырьё</h2><table><tr><th>Продукт</th><th class="n">Брутто</th><th class="n">Нетто</th><th>Ед.</th></tr>';
-    prodRows.forEach(({r,p})=>{h+='<tr><td>'+esc(p.name)+(r.pcs?' <span class="small">('+num(r.pcs)+' шт)</span>':'')+'</td><td class="n">'+num(r.brutto)+'</td><td class="n">'+num(netto(r.brutto,r.loss))+'</td><td>'+esc(p.unit)+'</td></tr>';});
+  if(prodRows.length){h+='<h2>Сырьё</h2><table><tr><th>Продукт</th><th class="n">Брутто</th><th class="n">Нетто</th><th>Ед.</th><th class="n pr">Цена</th><th class="n pr">Сумма, ₸</th></tr>';
+    prodRows.forEach(({r,p})=>{const n=netto(r.brutto,r.loss);h+='<tr><td>'+esc(p.name)+(r.pcs?' <span class="small">('+num(r.pcs)+' шт)</span>':'')+'</td><td class="n">'+num(r.brutto)+'</td><td class="n">'+num(n)+'</td><td>'+esc(p.unit)+'</td><td class="n pr">'+unitPrice(p)+'</td><td class="n pr">'+money(productUnitCost(p)*n)+'</td></tr>';});
     h+='</table>';}
-  if(semiRows.length){h+='<h2>Полуфабрикаты</h2><table><tr><th>Полуфабрикат</th><th class="n">Кол-во</th><th>Из чего (на это количество)</th></tr>';
-    semiRows.forEach(({r,s})=>{h+='<tr><td>'+esc(s.name)+'</td><td class="n">'+num(r.qty)+' '+esc(s.outputUnit||"г")+'</td><td class="small">'+semiLine(s,r.qty)+'</td></tr>';});
+  if(semiRows.length){h+='<h2>Полуфабрикаты</h2><table><tr><th>Полуфабрикат</th><th class="n">Кол-во</th><th>Из чего (на это количество)</th><th class="n pr">Сумма, ₸</th></tr>';
+    semiRows.forEach(({r,s})=>{h+='<tr><td>'+esc(s.name)+'</td><td class="n">'+num(r.qty)+' '+esc(s.outputUnit||"г")+'</td><td class="small">'+semiLine(s,r.qty)+'</td><td class="n pr">'+money(semiCostPerUnit(s,products,semis)*r.qty)+'</td></tr>';});
     h+='</table>';}
-  if(addons.length){h+='<h2>Добавки</h2><ul>';addons.forEach(x=>{h+='<li>'+esc(x.d.name)+' × '+num(x.r.qty)+'</li>';});h+='</ul>';}
-  if(pack.length){h+='<h2>Упаковка</h2><ul>';pack.forEach(x=>{h+='<li>'+esc(x.p.name)+' × '+num(x.q)+'</li>';});h+='</ul>';}
+  if(addons.length){h+='<h2>Добавки</h2><ul>';addons.forEach(x=>{h+='<li>'+esc(x.d.name)+' × '+num(x.r.qty)+'<span class="pr"> — '+money(dishCost(x.d,products,semis,dishes)*x.r.qty)+' ₸</span></li>';});h+='</ul>';}
+  if(pack.length){h+='<h2>Упаковка</h2><ul>';pack.forEach(x=>{h+='<li>'+esc(x.p.name)+' × '+num(x.q)+'<span class="pr"> — '+money(productUnitCost(x.p)*x.q)+' ₸</span></li>';});h+='</ul>';}
+  h+='<div class="pr"><h2>Себестоимость</h2><table><tr><td>Продукты'+(parts.length?' и блюда в составе':'')+'</td><td class="n">'+money(total-packCost-addCost)+' ₸</td></tr><tr><td>Упаковка</td><td class="n">'+money(packCost)+' ₸</td></tr><tr><td>Добавки</td><td class="n">'+money(addCost)+' ₸</td></tr><tr class="tot"><td>Итого себестоимость</td><td class="n">'+money(total)+' ₸</td></tr>'+(price?'<tr><td>Цена продажи</td><td class="n">'+money(price)+' ₸</td></tr><tr class="tot"><td>Фудкост</td><td class="n">'+num(fc)+'%</td></tr>':'')+'</table></div>';
   h+='<h2>Технология приготовления</h2>'+blank(5)+'<h2>Подача</h2>'+blank(2)+'<div class="sign"><div>Составил</div><div>Утвердил</div></div></body></html>';
   return h;
 }
+// Показ поверх страницы: новые окна браузеры часто блокируют
 function openCookCard(dish,products,semis,dishes){
-  const w=window.open("","_blank");
-  if(!w){alert("Разрешите всплывающие окна для этого сайта");return;}
-  w.document.open();w.document.write(cookCardHtml(dish,products,semis,dishes));w.document.close();
+  document.getElementById("cookCardFrame")?.remove();
+  const f=document.createElement("iframe");
+  f.id="cookCardFrame";
+  f.style.cssText="position:fixed;inset:0;width:100%;height:100%;border:0;z-index:10000;background:#fff";
+  f.srcdoc=cookCardHtml(dish,products,semis,dishes);
+  document.body.appendChild(f);
 }
 
 function DishDetailCard({dish,products,semis,dishes,cost,weight}){
