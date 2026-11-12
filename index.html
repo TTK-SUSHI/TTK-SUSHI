@@ -111,6 +111,8 @@ const fmt2=(n)=>Number(n||0).toLocaleString("ru",{maximumFractionDigits:2});
 const fmtDate=(ts)=>new Date(ts).toLocaleDateString("ru",{day:"2-digit",month:"2-digit",year:"numeric"});
 const netto=(brutto,loss)=>+(brutto*(1-(loss||0)/100)).toFixed(2);
 const isSetCat=(cat)=>SET_CATEGORIES.includes(cat);
+// Блюдо d содержит блюдо id на любой глубине — чтобы черновики не вкладывались друг в друга по кругу
+const dishUses=(d,id,dishes,seen=new Set())=>{if(!d||seen.has(d.id))return false;seen.add(d.id);return (d.dishLines||[]).some(r=>r.dishId===id||dishUses(dishes.find(x=>x.id===r.dishId),id,dishes,seen));};
 
 function productUnitCost(product){
   if(!product?.priceHistory?.length)return 0;
@@ -2249,7 +2251,7 @@ function DishesTab({state,dispatch}){
               color:dCatFilter==="all"?C.bg:C.muted,
               border:`1px solid ${dCatFilter==="all"?C.green:C.border}`,
               borderRadius:7,padding:"4px 10px",fontSize:11,fontWeight:700}}>Все</button>
-            {DISH_CATEGORIES.filter(c=>!isSetCat(c)&&c!=="Соуса").map(cat=>(
+            {DISH_CATEGORIES.filter(c=>(!isSetCat(c)||(c==="Черновики"&&form.category==="Черновики"))&&c!=="Соуса").map(cat=>(
               <button key={cat} onClick={()=>setDCatFilter(cat)} style={{
                 background:dCatFilter===cat?C.green:C.surface,
                 color:dCatFilter===cat?C.bg:C.muted,
@@ -2266,7 +2268,7 @@ function DishesTab({state,dispatch}){
           {/* Живой список блюд */}
           {(()=>{
             const availDishes=dishes
-              .filter(d=>d.id!==editId&&!isSetCat(d.category)&&d.category!=="Соуса")
+              .filter(d=>d.id!==editId&&(!isSetCat(d.category)||(d.category==="Черновики"&&form.category==="Черновики"&&!dishUses(d,editId,dishes)))&&d.category!=="Соуса")
               .filter(d=>dCatFilter==="all"||d.category===dCatFilter)
               .filter(d=>!dSearch||d.name.toLowerCase().includes(dSearch.toLowerCase()))
               .filter(d=>!form.dishLines.find(l=>l.dishId===d.id));
