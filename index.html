@@ -2840,6 +2840,35 @@ function App(){
     return ()=>clearInterval(poll);
   },[appReady]);
 
+  // ── Заявки поваров (povar.html): счётчик в шапке, полоса и уведомление ──
+  const [cookReq, setCookReq] = useState([]);
+  const [cookHide, setCookHide] = useState(false);
+  const cookSeen = useRef(null);
+  useEffect(()=>{
+    if(!appReady) return;
+    const check = async()=>{
+      if(!navigator.onLine) return;
+      const {data, error} = await sbClient.from("cook_devices").select("id,name,created_at").eq("status","pending").order("created_at");
+      if(error||!data) return;
+      const fresh = cookSeen.current ? data.filter(r=>!cookSeen.current.has(r.id)) : [];
+      cookSeen.current = new Set(data.map(r=>r.id));
+      setCookReq(data);
+      if(fresh.length){
+        setCookHide(false);
+        if(document.hidden && "Notification" in window && Notification.permission==="granted"){
+          try{ new Notification("Заявка повара", {body: fresh.map(r=>r.name).join(", ")+" — откройте ТТК, чтобы одобрить"}); }catch{}
+        }
+      }
+    };
+    check();
+    const t = setInterval(check, 20000);
+    return ()=>clearInterval(t);
+  },[appReady]);
+  useEffect(()=>{
+    const base = document.title.replace(/^\(\d+\) /,"");
+    document.title = (cookReq.length?"("+cookReq.length+") ":"")+base;
+  },[cookReq.length]);
+
   // ── Dispatch ──
   const dispatch = useCallback(a=> setState(s=> reducer(s,a)),[]);
 
@@ -3033,6 +3062,11 @@ function App(){
         </div>
       </div>
       <div style={{display:"flex",gap:6,alignItems:"center",flexShrink:0}}>
+        <a href="povar.html#cooks" target="_blank" rel="noopener" title="Страница поваров: заявки, QR-код, новые блюда" style={{
+          background:cookReq.length?C.yellowSoft:"transparent",border:`1px solid ${cookReq.length?C.yellow:C.border}`,
+          borderRadius:10,padding:"6px 10px",fontSize:14,color:C.text,textDecoration:"none",fontWeight:700,whiteSpace:"nowrap"}}>
+          👨‍🍳{cookReq.length>0&&<span style={{marginLeft:4,background:C.accent,color:"#fff",borderRadius:9,padding:"0 6px",fontSize:11}}>{cookReq.length}</span>}
+        </a>
         <button onClick={manualSync} title="Синхронизировать" style={{
           background:"transparent",border:`1px solid ${C.border}`,
           borderRadius:10,padding:"7px 10px",fontSize:14,color:C.muted}}>🔄</button>
@@ -3066,6 +3100,14 @@ function App(){
         <input ref={importRef} type="file" accept=".json" onChange={handleImportFile} style={{display:"none"}}/>
       </div>
     </div>
+
+    {cookReq.length>0&&!cookHide&&<div style={{background:C.yellowSoft,borderBottom:`1px solid ${C.yellow}66`,
+      padding:"10px 16px",fontSize:14,color:C.text,display:"flex",gap:10,alignItems:"center",justifyContent:"center",flexWrap:"wrap"}}>
+      <span>👨‍🍳 Заявка повара ждёт одобрения: <b>{cookReq.map(r=>r.name).join(", ")}</b></span>
+      <a href="povar.html#cooks" target="_blank" rel="noopener" style={{background:C.green,color:"#fff",borderRadius:8,padding:"6px 12px",fontWeight:700,textDecoration:"none"}}>Открыть</a>
+      {"Notification" in window&&Notification.permission==="default"&&<button onClick={()=>Notification.requestPermission().then(()=>setCookReq(r=>[...r]))} style={{background:"transparent",border:`1px solid ${C.border}`,borderRadius:8,padding:"6px 10px",fontSize:12,color:C.muted}}>🔔 Уведомлять</button>}
+      <button onClick={()=>setCookHide(true)} title="Скрыть" style={{background:"transparent",border:0,fontSize:18,color:C.muted}}>×</button>
+    </div>}
 
     {sync==="error"&&sbError&&sbError!=="table"&&<div style={{
       background:C.accentSoft,borderBottom:`1px solid ${C.accent}44`,
