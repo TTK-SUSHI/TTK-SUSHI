@@ -121,6 +121,7 @@ async function start(){
     const r = await load();
     if (r.status !== "approved") return gate(r);
     D = r; D.dishes.sort((a, b) => title(a).localeCompare(title(b), "ru"));
+    if (D.owner && location.hash === "#cooks" && !view.hashDone) { view.tab = "cooks"; view.hashDone = true; }
     if (!view.cat) view.cat = D.newIds.some(id => dish(id)) ? "new" : CATS.find(c => D.dishes.some(d => d.category === c));
     render();
   } catch(e) {
@@ -291,6 +292,7 @@ async function cooksPane(){
     ${r.status === "approved" ? `<button class="btn sm red" onclick="setDev('${r.id}','revoked')">Закрыть доступ</button>` : ""}
     ${r.status === "revoked" ? `<button class="btn sm gray" onclick="delDev('${r.id}')">Удалить</button>` : ""}</div></div>`).join("")
     : `<div class="empty">Заявок пока нет. Покажите поварам QR-код.</div>`;
+  clearTimeout(window._ct); window._ct = setTimeout(() => { if (view.tab === "cooks") { cooksPane(); pendingCount(); } }, 15000);
 }
 async function setDev(id, st){
   const {error} = await sb.from("cook_devices").update({status: st, decided_at: new Date().toISOString()}).eq("id", id);
