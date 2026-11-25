@@ -214,7 +214,8 @@ function card(fromPop){
   if (!fromPop) history.pushState({c: stack.length}, "");
   const isSet = SET_CATS.includes(d.category);
   const prods = (d.productLines || []).map(r => ({r, p: byId(D.products, r.productId)})).filter(x => x.p);
-  const ingr = prods.filter(x => x.p.category !== "Упаковка" && netto(x.r.brutto, x.r.loss) > 0)
+  // Фритюрное масло — только для себестоимости, повару не нужно
+  const ingr = prods.filter(x => x.p.category !== "Упаковка" && !/фрит+юр/i.test(x.p.name) && netto(x.r.brutto, x.r.loss) > 0)
     .map(x => [esc(x.p.name), num(x.r.pcs || netto(x.r.brutto, x.r.loss)) + " " + esc(x.r.pcs ? "шт" : x.p.unit)]);
   const semis = (d.semiLines || []).map(r => ({r, s: byId(D.semis, r.semiId)})).filter(x => x.s && x.r.qty > 0)
     .map(x => [esc(x.s.name), num(x.r.qty) + " " + esc(x.s.outputUnit || "г")]);
