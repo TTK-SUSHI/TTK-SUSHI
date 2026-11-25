@@ -194,7 +194,8 @@ function render(){
 
 function list(){
   const q = view.q.trim().toLowerCase();
-  let items = q ? D.dishes.filter(d => title(d).toLowerCase().includes(q))
+  // Черновики приходят только как часть утверждённых блюд — в поиске их не показываем
+  let items = q ? D.dishes.filter(d => CATS.includes(d.category) && title(d).toLowerCase().includes(q))
     : view.cat === "new" ? D.dishes.filter(d => isNew(d.id)) : D.dishes.filter(d => d.category === view.cat);
   items = items.slice().sort((a, b) => isNew(b.id) - isNew(a.id)); // новые — первыми
   const el = document.getElementById("list");
