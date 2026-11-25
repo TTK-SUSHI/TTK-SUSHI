@@ -1,0 +1,320 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow">
+<meta name="theme-color" content="#16A34A">
+<title>Техкарты ТОКИО</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.js" integrity="sha384-TcHRA3zBbn+Lexh5n+Oil4guNPOS3rjNDpGRAN46u/s/mB2IZ50ceC6TYDU2yvgK" crossorigin="anonymous"></script>
+<style>
+:root{--bg:#F4F6F1;--card:#fff;--text:#1C1F17;--muted:#6B7264;--line:#E2E6DC;--green:#16A34A;--green2:#DCFCE7;--yellow:#FACC15;--red:#DC2626}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--bg);color:var(--text);font:16px/1.35 -apple-system,"Segoe UI",Roboto,Arial,sans-serif}
+button,input{font:inherit}
+.top{position:sticky;top:0;z-index:5;background:var(--green);color:#fff;padding:10px 12px 8px;box-shadow:0 2px 6px #0002}
+.brand{display:flex;justify-content:space-between;align-items:center;font-weight:800;letter-spacing:.5px;margin-bottom:8px}
+.brand small{font-weight:600;opacity:.85;font-size:13px}
+.search{width:100%;border:0;border-radius:10px;padding:11px 12px;font-size:17px;outline:none}
+.tabs{display:flex;gap:6px;overflow-x:auto;padding:8px 12px;background:#fff;border-bottom:1px solid var(--line);position:sticky;top:96px;z-index:4;scrollbar-width:none}
+.tabs::-webkit-scrollbar{display:none}
+.chip{flex:none;border:1px solid var(--line);background:#fff;border-radius:20px;padding:7px 13px;font-size:14px;font-weight:600;color:var(--text);white-space:nowrap}
+.chip.on{background:var(--green);border-color:var(--green);color:#fff}
+.chip.new{border-color:var(--yellow)}
+.list{padding:10px 12px 40px;display:flex;flex-direction:column;gap:8px}
+.item{display:flex;gap:12px;align-items:center;background:var(--card);border-radius:12px;padding:10px 12px;border:1px solid var(--line);text-align:left;width:100%}
+.thumb{width:56px;height:56px;border-radius:9px;object-fit:cover;background:#EEF1EA;flex:none;display:flex;align-items:center;justify-content:center;font-size:24px}
+.iname{font-weight:700;font-size:16px}
+.isub{color:var(--muted);font-size:13px;margin-top:2px}
+.badge{display:inline-block;background:var(--yellow);color:#422;border-radius:6px;font-size:11px;font-weight:800;padding:1px 6px;margin-left:6px;vertical-align:2px}
+.empty{color:var(--muted);text-align:center;padding:40px 10px}
+.sheet{position:fixed;inset:0;background:var(--bg);z-index:20;overflow-y:auto;padding-bottom:40px}
+.sheet .bar{position:sticky;top:0;background:var(--green);color:#fff;display:flex;align-items:center;gap:8px;padding:10px 12px;z-index:2}
+.back{background:#fff3;border:0;color:#fff;border-radius:9px;padding:8px 12px;font-weight:700;font-size:15px}
+.bar .t{font-weight:800;font-size:17px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.photo{width:100%;max-height:300px;object-fit:contain;background:#fff;display:block}
+.box{background:var(--card);margin:10px 12px;border-radius:12px;border:1px solid var(--line);overflow:hidden}
+.box h3{margin:0;padding:9px 12px;font-size:13px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);border-bottom:1px solid var(--line)}
+.row{display:flex;justify-content:space-between;gap:10px;padding:9px 12px;border-bottom:1px solid var(--line);font-size:16px}
+.row:last-child{border-bottom:0}
+.row b{white-space:nowrap}
+.row.link{color:var(--green);font-weight:700}
+.head{padding:12px 12px 2px}
+.head h1{margin:0;font-size:22px}
+.head .meta{color:var(--muted);font-size:14px;margin-top:3px}
+.note{font-size:13px;color:var(--muted);padding:6px 12px 10px}
+.wm{position:fixed;inset:-50%;z-index:30;pointer-events:none;display:flex;flex-wrap:wrap;align-content:flex-start;gap:70px 90px;transform:rotate(-28deg);opacity:.07;font-weight:800;font-size:20px;color:#000;overflow:hidden}
+.center{max-width:420px;margin:0 auto;padding:40px 18px;text-align:center}
+.center h2{margin:10px 0}
+.btn{display:inline-block;border:0;border-radius:11px;padding:13px 18px;font-weight:800;font-size:16px;background:var(--green);color:#fff;width:100%;margin-top:10px}
+.btn.gray{background:#E5E7E1;color:var(--text)}
+.btn.red{background:var(--red)}
+.btn.sm{width:auto;padding:8px 12px;font-size:14px;margin:0}
+.field{width:100%;border:1px solid var(--line);border-radius:11px;padding:13px;font-size:17px;margin-top:14px}
+.err{color:var(--red);font-size:14px;margin-top:8px}
+.foot{color:var(--muted);font-size:12px;text-align:center;padding:4px 12px 30px}
+.dev{background:#fff;border:1px solid var(--line);border-radius:12px;padding:10px 12px}
+.dev .n{font-weight:800}
+.dev .s{font-size:13px;color:var(--muted);margin:2px 0 8px}
+.acts{display:flex;gap:6px;flex-wrap:wrap}
+.st{font-size:12px;font-weight:800;border-radius:6px;padding:1px 7px;margin-left:6px}
+.st.pending{background:#FEF3C7;color:#92400E}.st.approved{background:var(--green2);color:#166534}.st.revoked{background:#FEE2E2;color:#991B1B}
+.owner{display:flex;gap:6px;flex-wrap:wrap;padding:10px 12px}
+#qr{display:flex;justify-content:center;padding:16px;background:#fff}
+@media print{.top,.tabs,.noprint{display:none!important}.wm{display:none}body{background:#fff}}
+</style>
+</head>
+<body>
+<div id="app"><div class="center"><h2>Загрузка…</h2></div></div>
+<script>
+const SB_URL = "https://eiodeeugxtbbcpclxtyc.supabase.co";
+const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVpb2RlZXVneHRiYmNwY2x4dHljIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI0MDY5ODcsImV4cCI6MjA5Nzk4Mjk4N30.h2y3Kj5WNKz8sa0W2RD1O1uO1mN7PWVegoFUPGNkcvg";
+const sb = window.supabase.createClient(SB_URL, SB_KEY);
+const CATS = ["Комбо","Сеты","Суши","Классические роллы","Жареные роллы","Запечённые роллы","Сложные роллы","Роллы 8шт","Роллы 10шт","Пицца 25см","Пицца 30см","Бургеры","Донеры","Вок","Закуски","Акции","Соуса","Напитки"];
+const SET_CATS = ["Комбо","Сеты"];
+const ROLL_PCS = {"Классические роллы":8,"Жареные роллы":8,"Запечённые роллы":8,"Сложные роллы":8,"Роллы 8шт":8,"Роллы 10шт":10};
+const $app = document.getElementById("app");
+const esc = s => String(s ?? "").trim().replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const num = n => Number(n || 0).toLocaleString("ru", {maximumFractionDigits: 1});
+const qtyTxt = q => q === 0.5 ? "½" : q === 0.25 ? "¼" : num(q);
+
+// Ключ этого телефона: создаётся один раз, в базе хранится только его хеш
+function token(){
+  let t = null;
+  try { t = localStorage.getItem("povar_token"); } catch(e) {}
+  if (!t) {
+    const a = new Uint8Array(32); crypto.getRandomValues(a);
+    t = Array.from(a, b => b.toString(16).padStart(2, "0")).join("");
+    try { localStorage.setItem("povar_token", t); } catch(e) {}
+  }
+  return t;
+}
+
+let D = null;            // данные: dishes, products, semis, newIds, photos, name, owner
+let view = {cat: null, q: "", tab: "dishes"};
+let stack = [];          // открытые карточки (id блюд)
+
+const byId = (arr, id) => arr.find(x => x.id === id);
+const dish = id => byId(D.dishes, id);
+const title = d => d.name.trim() + (d.category === "Пицца 25см" ? " 25 см" : d.category === "Пицца 30см" ? " 30 см" : "");
+const netto = (b, l) => +(b * (1 - (l || 0) / 100)).toFixed(2);
+const photoUrl = id => D.photos[String(id)] ? SB_URL + "/storage/v1/object/public/cook-photos/" + D.photos[String(id)] : null;
+const isNew = id => D.newIds.includes(id);
+function addonW(d){ return (d.dishLines || []).reduce((s, r) => { const x = dish(r.dishId); return x && x.category === "Соуса" ? s + (x.weightOverride || weight(x)) * r.qty : s; }, 0); }
+function weight(d){
+  const p = (d.productLines || []).reduce((s, r) => s + netto(r.brutto, r.loss), 0);
+  const s2 = (d.semiLines || []).reduce((s, r) => s + r.qty, 0);
+  const n = (d.dishLines || []).reduce((s, r) => { const x = dish(r.dishId); if (!x || x.id === d.id) return s;
+    return s + (x.weightOverride || (weight(x) - (SET_CATS.includes(d.category) ? addonW(x) : 0))) * r.qty; }, 0);
+  return p + s2 + n;
+}
+const outW = d => +d.weightOverride || weight(d);
+
+async function load(){
+  const {data, error} = await sb.rpc("cook_data", {p_token: token()});
+  if (error) throw error;
+  return data;
+}
+
+async function start(){
+  try {
+    const r = await load();
+    if (r.status !== "approved") return gate(r);
+    D = r; D.dishes.sort((a, b) => title(a).localeCompare(title(b), "ru"));
+    if (!view.cat) view.cat = D.newIds.some(id => dish(id)) ? "new" : CATS.find(c => D.dishes.some(d => d.category === c));
+    render();
+  } catch(e) {
+    $app.innerHTML = `<div class="center"><h2>Нет связи</h2><p>${esc(e.message || e)}</p><button class="btn" onclick="start()">Повторить</button></div>`;
+  }
+}
+
+// Экран до одобрения
+let pollT = null;
+function gate(r){
+  clearTimeout(pollT);
+  if (r.status === "none") {
+    $app.innerHTML = `<div class="center"><div style="font-size:46px">🍣</div><h2>Техкарты ТОКИО</h2>
+      <p>Введите своё имя. Владелец получит заявку и откроет доступ этому телефону.</p>
+      <input id="nm" class="field" maxlength="40" placeholder="Имя и фамилия" autocomplete="name">
+      <button class="btn" id="go">Отправить заявку</button><div class="err" id="er"></div></div>`;
+    document.getElementById("go").onclick = async () => {
+      const nm = document.getElementById("nm").value.trim();
+      if (!nm) { document.getElementById("er").textContent = "Введите имя"; return; }
+      const {data, error} = await sb.rpc("cook_register", {p_token: token(), p_name: nm, p_ua: navigator.userAgent});
+      if (error) { document.getElementById("er").textContent = "Не отправилось, попробуйте позже"; return; }
+      gate({status: data, name: nm});
+    };
+    return;
+  }
+  if (r.status === "pending") {
+    $app.innerHTML = `<div class="center"><div style="font-size:46px">⏳</div><h2>Заявка отправлена</h2>
+      <p><b>${esc(r.name)}</b>, ждите — владелец откроет доступ.</p><p style="color:var(--muted);font-size:14px">Страница обновится сама.</p>
+      <button class="btn gray" onclick="start()">Проверить</button></div>`;
+    pollT = setTimeout(start, 10000);
+    return;
+  }
+  $app.innerHTML = `<div class="center"><div style="font-size:46px">🔒</div><h2>Доступ закрыт</h2><p>Обратитесь к владельцу.</p></div>`;
+}
+
+function watermark(){
+  const t = esc(D.name);
+  return `<div class="wm">${Array(160).fill(`<span>${t}</span>`).join("")}</div>`;
+}
+
+function render(){
+  const cats = CATS.filter(c => D.dishes.some(d => d.category === c));
+  const hasNew = D.newIds.some(id => dish(id));
+  const ownerTabs = D.owner ? `<div class="owner noprint">
+      <button class="chip ${view.tab === "dishes" ? "on" : ""}" onclick="setTab('dishes')">🍣 Блюда</button>
+      <button class="chip ${view.tab === "cooks" ? "on" : ""}" onclick="setTab('cooks')">👨‍🍳 Повара <span id="pc"></span></button>
+      <button class="chip ${view.tab === "qr" ? "on" : ""}" onclick="setTab('qr')">▦ QR-код</button></div>` : "";
+  if (D.owner && view.tab !== "dishes") {
+    $app.innerHTML = `<div class="top"><div class="brand">ТОКИО · ТЕХКАРТЫ <small>владелец</small></div></div>${ownerTabs}<div id="pane" class="list"></div>`;
+    pendingCount();
+    return view.tab === "cooks" ? cooksPane() : qrPane();
+  }
+  $app.innerHTML = `
+    <div class="top"><div class="brand">ТОКИО · ТЕХКАРТЫ <small>${esc(D.name)}</small></div>
+      <input class="search" id="q" type="search" placeholder="🔍 Поиск блюда" value="${esc(view.q)}"></div>
+    ${D.owner ? ownerTabs : ""}
+    <div class="tabs" id="tabs">${hasNew ? `<button class="chip new ${view.cat === "new" ? "on" : ""}" data-c="new">⭐ Новые</button>` : ""}
+      ${cats.map(c => `<button class="chip ${view.cat === c ? "on" : ""}" data-c="${esc(c)}">${esc(c)}</button>`).join("")}</div>
+    <div class="list" id="list"></div>
+    <div class="foot">Обновлено ${D.ts ? new Date(+D.ts).toLocaleString("ru", {day:"2-digit", month:"2-digit", hour:"2-digit", minute:"2-digit"}) : ""}</div>
+    ${D.owner ? "" : watermark()}`;
+  if (D.owner) { pendingCount(); document.querySelector(".tabs").style.top = "0"; document.querySelector(".tabs").style.position = "static"; }
+  const q = document.getElementById("q");
+  q.oninput = () => { view.q = q.value; list(); };
+  document.getElementById("tabs").onclick = e => { const b = e.target.closest("[data-c]"); if (!b) return; view.cat = b.dataset.c; view.q = ""; q.value = "";
+    document.querySelectorAll("#tabs .chip").forEach(x => x.classList.toggle("on", x === b)); list(); window.scrollTo(0, 0); };
+  list();
+  const on = document.querySelector("#tabs .chip.on"); if (on) on.scrollIntoView({inline: "center", block: "nearest"});
+}
+
+function list(){
+  const q = view.q.trim().toLowerCase();
+  let items = q ? D.dishes.filter(d => title(d).toLowerCase().includes(q))
+    : view.cat === "new" ? D.dishes.filter(d => isNew(d.id)) : D.dishes.filter(d => d.category === view.cat);
+  const el = document.getElementById("list");
+  if (!items.length) { el.innerHTML = `<div class="empty">${q ? "Ничего не найдено" : "Пусто"}</div>`; return; }
+  el.innerHTML = items.map(d => { const ph = photoUrl(d.id);
+    return `<button class="item" onclick="openDish(${d.id})">${ph ? `<img class="thumb" loading="lazy" src="${ph}" alt="">` : `<div class="thumb">🍽</div>`}
+      <div><div class="iname">${esc(title(d))}${isNew(d.id) ? `<span class="badge">НОВОЕ</span>` : ""}</div>
+      <div class="isub">${q || view.cat === "new" ? esc(d.category) + " · " : ""}${num(outW(d))} г</div></div></button>`; }).join("");
+}
+
+function openDish(id){ stack.push(id); card(); }
+function back(){ stack.pop(); stack.length ? card() : closeCard(); }
+function closeCard(){ const s = document.getElementById("sheet"); if (s) s.remove(); }
+window.addEventListener("popstate", () => { if (stack.length) { stack.pop(); stack.length ? card(true) : closeCard(); } });
+
+function card(fromPop){
+  const d = dish(stack[stack.length - 1]); if (!d) return back();
+  if (!fromPop) history.pushState({c: stack.length}, "");
+  const isSet = SET_CATS.includes(d.category);
+  const prods = (d.productLines || []).map(r => ({r, p: byId(D.products, r.productId)})).filter(x => x.p);
+  const ingr = prods.filter(x => x.p.category !== "Упаковка" && netto(x.r.brutto, x.r.loss) > 0)
+    .map(x => [esc(x.p.name), num(x.r.pcs || netto(x.r.brutto, x.r.loss)) + " " + esc(x.r.pcs ? "шт" : x.p.unit)]);
+  const semis = (d.semiLines || []).map(r => ({r, s: byId(D.semis, r.semiId)})).filter(x => x.s && x.r.qty > 0)
+    .map(x => [esc(x.s.name), num(x.r.qty) + " " + esc(x.s.outputUnit || "г")]);
+  const lines = (d.dishLines || []).map(r => ({r, x: dish(r.dishId)})).filter(o => o.x);
+  const parts = lines.filter(o => o.x.category !== "Соуса"), adds = lines.filter(o => o.x.category === "Соуса");
+  const pack = [...(d.packLines || []).map(r => ({p: byId(D.products, r.productId), q: r.qty})),
+    ...prods.filter(x => x.p.category === "Упаковка").map(x => ({p: x.p, q: x.r.brutto}))].filter(x => x.p);
+  const rows = a => a.map(([n, q]) => `<div class="row"><span>${n}</span><b>${q}</b></div>`).join("");
+  const ph = photoUrl(d.id);
+  let h = `<div class="bar"><button class="back" onclick="history.back()">← Назад</button><div class="t">${esc(title(d))}</div></div>
+    ${ph ? `<img class="photo" src="${ph}" alt="">` : ""}
+    <div class="head"><h1>${esc(title(d))}${isNew(d.id) ? `<span class="badge">НОВОЕ</span>` : ""}</h1>
+      <div class="meta">${esc(d.category)} · выход ≈ ${num(outW(d))} г${ROLL_PCS[d.category] ? " · " + ROLL_PCS[d.category] + " шт" : ""}</div></div>`;
+  if (parts.length) h += `<div class="box"><h3>${isSet ? "Что входит" : "Блюда"}</h3>${parts.map(o =>
+    `<div class="row link" onclick="openDish(${o.x.id})"><span>${esc(title(o.x))} ›</span><b>${qtyTxt(o.r.qty)}${o.r.cutPcs ? " · " + o.r.cutPcs + " шт" : ""}</b></div>`).join("")}</div>`;
+  if (ingr.length || semis.length) h += `<div class="box"><h3>Состав</h3>${rows(semis)}${rows(ingr)}</div>`;
+  if (adds.length) h += `<div class="box"><h3>Добавки</h3>${rows(adds.map(o => [esc(o.x.name), "× " + num(o.r.qty)]))}</div>`;
+  if (pack.length) h += `<div class="box"><h3>Упаковка</h3>${rows(pack.map(x => [esc(x.p.name), "× " + num(x.q)]))}</div>`;
+  if (D.owner) h += `<div class="box noprint"><h3>Владелец</h3><div class="owner">
+      <button class="btn sm ${isNew(d.id) ? "gray" : ""}" onclick="toggleNew(${d.id})">${isNew(d.id) ? "Убрать из новых" : "⭐ Отметить новым"}</button>
+      <label class="btn sm">📷 ${ph ? "Заменить фото" : "Добавить фото"}<input type="file" accept="image/*" hidden onchange="uploadPhoto(${d.id}, this.files[0])"></label>
+      ${ph ? `<button class="btn sm red" onclick="removePhoto(${d.id})">Убрать фото</button>` : ""}</div><div class="note" id="on"></div></div>`;
+  let s = document.getElementById("sheet");
+  if (!s) { s = document.createElement("div"); s.id = "sheet"; s.className = "sheet"; document.body.appendChild(s); }
+  s.innerHTML = h; s.scrollTop = 0;
+}
+
+// ── Владелец ──
+async function refresh(){ const r = await load(); if (r.status === "approved") { D = r; D.dishes.sort((a, b) => title(a).localeCompare(title(b), "ru")); } }
+async function toggleNew(id){
+  const q = isNew(id) ? sb.from("cook_new_dishes").delete().eq("dish_id", id) : sb.from("cook_new_dishes").upsert({dish_id: id});
+  const {error} = await q; if (error) return alertNote(error.message);
+  await refresh(); card(true); list();
+}
+function alertNote(t){ const n = document.getElementById("on"); if (n) n.textContent = t; }
+async function shrink(file){
+  const img = await createImageBitmap(file), k = Math.min(1, 1200 / Math.max(img.width, img.height));
+  const c = document.createElement("canvas"); c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+  const g = c.getContext("2d"); g.fillStyle = "#fff"; g.fillRect(0, 0, c.width, c.height); g.drawImage(img, 0, 0, c.width, c.height);
+  return await new Promise(r => c.toBlob(r, "image/jpeg", 0.85));
+}
+async function uploadPhoto(id, file){
+  if (!file) return; alertNote("Загружаю…");
+  try {
+    const blob = await shrink(file), path = id + "-" + Date.now() + ".jpg", old = D.photos[String(id)];
+    let {error} = await sb.storage.from("cook-photos").upload(path, blob, {contentType: "image/jpeg"}); if (error) throw error;
+    ({error} = await sb.from("cook_photos").upsert({dish_id: id, path, updated_at: new Date().toISOString()})); if (error) throw error;
+    if (old) await sb.storage.from("cook-photos").remove([old]);
+    await refresh(); card(true); list();
+  } catch(e) { alertNote("Ошибка: " + (e.message || e)); }
+}
+async function removePhoto(id){
+  const old = D.photos[String(id)];
+  const {error} = await sb.from("cook_photos").delete().eq("dish_id", id); if (error) return alertNote(error.message);
+  if (old) await sb.storage.from("cook-photos").remove([old]);
+  await refresh(); card(true); list();
+}
+function setTab(t){ view.tab = t; closeCard(); stack = []; render(); }
+async function pendingCount(){
+  const {count} = await sb.from("cook_devices").select("id", {count: "exact", head: true}).eq("status", "pending");
+  const el = document.getElementById("pc"); if (el) el.textContent = count ? "(" + count + ")" : "";
+}
+const devName = ua => /iPhone/.test(ua || "") ? "iPhone" : /iPad/.test(ua || "") ? "iPad" : /Android/.test(ua || "") ? "Android" : /Windows/.test(ua || "") ? "Windows" : "телефон";
+const dt = t => t ? new Date(t).toLocaleString("ru", {day:"2-digit", month:"2-digit", hour:"2-digit", minute:"2-digit"}) : "—";
+async function cooksPane(){
+  const el = document.getElementById("pane");
+  const {data, error} = await sb.from("cook_devices").select("*").order("created_at", {ascending: false});
+  if (error) { el.innerHTML = `<div class="empty">${esc(error.message)}</div>`; return; }
+  const order = {pending: 0, approved: 1, revoked: 2}, label = {pending: "ждёт", approved: "доступ есть", revoked: "закрыт"};
+  data.sort((a, b) => order[a.status] - order[b.status]);
+  el.innerHTML = data.length ? data.map(r => `<div class="dev"><div class="n">${esc(r.name)}<span class="st ${r.status}">${label[r.status]}</span></div>
+    <div class="s">${devName(r.user_agent)} · заявка ${dt(r.created_at)} · заходил ${dt(r.last_seen)}</div><div class="acts">
+    ${r.status !== "approved" ? `<button class="btn sm" onclick="setDev('${r.id}','approved')">Разрешить</button>` : ""}
+    ${r.status === "pending" ? `<button class="btn sm red" onclick="setDev('${r.id}','revoked')">Отклонить</button>` : ""}
+    ${r.status === "approved" ? `<button class="btn sm red" onclick="setDev('${r.id}','revoked')">Закрыть доступ</button>` : ""}
+    ${r.status === "revoked" ? `<button class="btn sm gray" onclick="delDev('${r.id}')">Удалить</button>` : ""}</div></div>`).join("")
+    : `<div class="empty">Заявок пока нет. Покажите поварам QR-код.</div>`;
+}
+async function setDev(id, st){
+  const {error} = await sb.from("cook_devices").update({status: st, decided_at: new Date().toISOString()}).eq("id", id);
+  if (error) return alert(error.message); cooksPane(); pendingCount();
+}
+async function delDev(id){ const {error} = await sb.from("cook_devices").delete().eq("id", id); if (error) return alert(error.message); cooksPane(); }
+function qrPane(){
+  const url = location.origin + location.pathname;
+  document.getElementById("pane").innerHTML = `<div class="box"><div id="qr"></div>
+    <div class="head" style="text-align:center;padding-bottom:12px"><h1>Техкарты ТОКИО</h1><div class="meta">Наведите камеру телефона на код</div>
+    <div class="meta" style="word-break:break-all">${esc(url)}</div></div></div>
+    <button class="btn noprint" onclick="window.print()">🖨 Печать</button>`;
+  const go = () => new QRCode(document.getElementById("qr"), {text: url, width: 260, height: 260, correctLevel: QRCode.CorrectLevel.M});
+  if (window.QRCode) return go();
+  const sc = document.createElement("script"); sc.src = "https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"; sc.onload = go; document.head.appendChild(sc);
+}
+
+// Свежие данные, когда повар возвращается на страницу
+document.addEventListener("visibilitychange", async () => {
+  if (document.visibilityState !== "visible" || !D) return;
+  try { const r = await load(); if (r.status !== "approved") { closeCard(); stack = []; return gate(r); }
+    if (r.ts !== D.ts || JSON.stringify(r.newIds) !== JSON.stringify(D.newIds)) { D = r; D.dishes.sort((a, b) => title(a).localeCompare(title(b), "ru")); if (!stack.length) render(); } } catch(e) {}
+});
+start();
+</script>
+</body>
+</html>
