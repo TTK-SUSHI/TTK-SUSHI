@@ -3048,7 +3048,7 @@ function App(){
       <span className="header-ingredient hi-7">🧀</span>
       <span className="header-ingredient hi-8">🌿</span>
 
-      <div style={{display:"flex",alignItems:"center",gap:12,flexShrink:1,minWidth:0,position:"relative"}}>
+      <div style={{display:"flex",alignItems:"center",gap:12,flexShrink:1,minWidth:0,position:"relative",overflow:"hidden"}}>
         <div style={{width:34,height:34,borderRadius:10,
           background:`linear-gradient(135deg,${C.green},${C.teal})`,
           display:"flex",alignItems:"center",justifyContent:"center",
@@ -3061,7 +3061,7 @@ function App(){
           </div>
         </div>
       </div>
-      <div style={{display:"flex",gap:6,alignItems:"center",flexShrink:0}}>
+      <div style={{display:"flex",gap:6,alignItems:"center",flexShrink:0,position:"relative",zIndex:2}}>
         <a href="povar.html#cooks" target="_blank" rel="noopener" title="Страница поваров: заявки, QR-код, новые блюда" style={{
           background:cookReq.length?C.yellowSoft:"transparent",border:`1px solid ${cookReq.length?C.yellow:C.border}`,
           borderRadius:10,padding:"6px 10px",fontSize:14,color:C.text,textDecoration:"none",fontWeight:700,whiteSpace:"nowrap"}}>
