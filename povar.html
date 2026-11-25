@@ -307,10 +307,47 @@ function qrPane(){
   document.getElementById("pane").innerHTML = `<div class="box"><div id="qr"></div>
     <div class="head" style="text-align:center;padding-bottom:12px"><h1>Техкарты ТОКИО</h1><div class="meta">Наведите камеру телефона на код</div>
     <div class="meta" style="word-break:break-all">${esc(url)}</div></div></div>
-    <button class="btn noprint" onclick="window.print()">🖨 Печать</button>`;
+    <button class="btn noprint" onclick="shareQr()">📤 Отправить QR</button>
+    <button class="btn gray noprint" onclick="downloadQr()">⬇ Скачать картинку</button>
+    <button class="btn gray noprint" onclick="copyLink()">🔗 Скопировать ссылку</button>
+    <button class="btn gray noprint" onclick="window.print()">🖨 Печать</button>
+    <div class="note noprint" id="qn" style="text-align:center">По ссылке повар отправит заявку — без вашего «Разрешить» техкарты не откроются.</div>`;
   const go = () => new QRCode(document.getElementById("qr"), {text: url, width: 260, height: 260, correctLevel: QRCode.CorrectLevel.M});
   if (window.QRCode) return go();
   const sc = document.createElement("script"); sc.src = "https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"; sc.onload = go; document.head.appendChild(sc);
+}
+// Картинка для отправки: заголовок, QR, подпись
+async function qrBlob(){
+  const src = document.querySelector("#qr canvas"); if (!src) throw new Error("QR ещё не готов");
+  const c = document.createElement("canvas"); c.width = 720; c.height = 900; const g = c.getContext("2d");
+  g.fillStyle = "#fff"; g.fillRect(0, 0, 720, 900);
+  g.fillStyle = "#16A34A"; g.fillRect(0, 0, 720, 120);
+  g.fillStyle = "#fff"; g.font = "800 44px Arial"; g.textAlign = "center"; g.fillText("ТОКИО · Техкарты", 360, 78);
+  g.imageSmoothingEnabled = false; g.drawImage(src, 110, 170, 500, 500);
+  g.fillStyle = "#1C1F17"; g.font = "700 34px Arial"; g.fillText("Наведите камеру телефона", 360, 745);
+  g.fillStyle = "#6B7264"; g.font = "26px Arial"; g.fillText("Откроются техкарты после одобрения", 360, 795);
+  g.fillText(location.host + location.pathname, 360, 850);
+  return await new Promise(r => c.toBlob(r, "image/png"));
+}
+const qrUrl = () => location.origin + location.pathname;
+function qnote(t){ const n = document.getElementById("qn"); if (n) n.textContent = t; }
+async function shareQr(){
+  try {
+    const file = new File([await qrBlob()], "Техкарты ТОКИО QR.png", {type: "image/png"});
+    if (navigator.canShare && navigator.canShare({files: [file]})) {
+      await navigator.share({files: [file], title: "Техкарты ТОКИО", text: "Техкарты ТОКИО: " + qrUrl()});
+    } else if (navigator.share) {
+      await navigator.share({title: "Техкарты ТОКИО", text: "Техкарты ТОКИО", url: qrUrl()});
+    } else { downloadQr(); qnote("Отправка с этого устройства недоступна — картинка скачана, отправьте её в WhatsApp/Telegram."); }
+  } catch(e) { if (e.name !== "AbortError") qnote("Не получилось: " + (e.message || e)); }
+}
+async function downloadQr(){
+  try { const a = document.createElement("a"); a.href = URL.createObjectURL(await qrBlob()); a.download = "Техкарты ТОКИО QR.png"; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 5000); }
+  catch(e) { qnote("Не получилось: " + (e.message || e)); }
+}
+async function copyLink(){
+  try { await navigator.clipboard.writeText(qrUrl()); qnote("Ссылка скопирована: " + qrUrl()); }
+  catch(e) { qnote("Скопируйте вручную: " + qrUrl()); }
 }
 
 // Свежие данные, когда повар возвращается на страницу
